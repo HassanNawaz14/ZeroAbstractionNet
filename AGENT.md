@@ -1,4 +1,4 @@
-# AGENT.md — cpu-native-ann
+# AGENT.md — ZEROABSTRACTIONNET
 
 ## What this project is
 A 3-phase educational/portfolio project: a from-scratch feedforward neural
@@ -97,6 +97,23 @@ win — this file governs *process and conventions*, not the technical spec.
 - Asm: NASM syntax, comment every non-obvious instruction sequence
   (especially the horizontal-reduction and block-loop sections) — this
   code needs to be readable for a blog post, not just correct.
+
+## Dataset characteristics (heuristics, not code)
+
+- **Task:** 2D binary classification with an XOR-like decision boundary.
+  Label = 1 in quadrants I & III (x*y > 0), label = 0 in II & IV (x*y < 0).
+- **Input domain:** [-1, 1]², axes excluded.  Balanced per quadrant.
+- **Layout:** Jittered grid (not pure random) for even visual coverage — grid
+  spacing ± small seeded jitter.
+- **Deterministic:** seeded `random.Random(seed)` — same seed, same data.
+  The noise_std knob (default 0.0) adds Gaussian coordinate noise.
+- **Golden test points:** (0.5,0.5)→1, (-0.5,-0.5)→1, (0.5,-0.5)→0, (-0.5,0.5)→0.
+  These four must always classify correctly after training.
+- **Size:** `n_per_quadrant * 4` points (default 25×4 = 100).  Training is
+  full-batch (no minibatch shuffling) for reproducibility.
+- **Probe grid:** Uniform `resolution × resolution` grid over [-1, 1]²
+  (default 40×40 = 1600 points), forward-passed each log step for the
+  animation heatmap.  Never used for training.
 
 ## What "done" looks like for the whole project
 `RESULTS.md` (specified at the end of `03_asm_phase.md`) exists and is

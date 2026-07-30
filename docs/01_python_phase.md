@@ -1,7 +1,7 @@
 # Phase 1 — Pure Python (No NumPy) ANN Core
 
 ## Project name
-`cpu-native-ann`
+`ZeroAbstractionNet`
 
 ## Big picture
 This is phase 1 of a 3-phase project (Python → C → x86-64 assembly). We are
