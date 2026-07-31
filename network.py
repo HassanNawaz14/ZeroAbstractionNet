@@ -79,14 +79,18 @@ class Network:
                         row.append(da[j][k] * tanh_prime_from_output(a[j][k]))
                     dz.append(row)
 
+            scale = 1.0 / n
             dW = self.backend.matmul(self.backend.transpose(a_prev), dz)
+            for r in range(len(dW)):
+                for c in range(len(dW[0])):
+                    dW[r][c] *= scale
 
             db = []
             for k in range(len(dz[0])):
                 s = 0.0
                 for j in range(n):
                     s += dz[j][k]
-                db.append(s)
+                db.append(s * scale)
 
             if i == num_layers - 1:
                 da = self.backend.matmul(dz, self.backend.transpose(self.weights[i]))
