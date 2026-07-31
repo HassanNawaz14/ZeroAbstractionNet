@@ -1,7 +1,7 @@
 """Single source of truth for all hyperparameters and dataset defaults."""
 
 # Network architecture
-LAYER_SIZES = [2, 4, 1]
+LAYER_SIZES = [2, 4, 4, 1]
 
 # Training
 LR = 0.5
