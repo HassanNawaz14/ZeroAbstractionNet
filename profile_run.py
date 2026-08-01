@@ -14,17 +14,21 @@ from config import LAYER_SIZES, LR, SEED, N_PER_QUADRANT
 from data.generate_data import generate_dataset
 from network import Network
 from ops import get_backend
+from train import parse_layers
 
 
 def main():
     parser = argparse.ArgumentParser(description="Profile the training loop")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--backend", type=str, default="python", choices=["python", "c", "asm"])
+    parser.add_argument("--layers", type=str, default=None,
+                        help="comma-separated layer sizes, e.g. '2,32,32,1' (default: config.LAYER_SIZES)")
     args = parser.parse_args()
 
     backend = get_backend(args.backend)
+    layer_sizes = parse_layers(args.layers) if args.layers else LAYER_SIZES
     X, y = generate_dataset(N_PER_QUADRANT, SEED)
-    net = Network(LAYER_SIZES, backend, SEED)
+    net = Network(layer_sizes, backend, SEED)
 
     t_forward = 0.0
     t_backward = 0.0

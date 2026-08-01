@@ -10,6 +10,26 @@ it into the existing selector. If you find yourself editing
 `network.py`, stop — the interface from phase 1 should already support
 this.
 
+## Two-tier verification — where phase 2 must show its speedup
+
+The phase-1 two-tier strategy applies to everything in this phase.
+
+**Correctness is verified at the demo tier** (tiny `[2,4,4,1]` net, 100
+points): C output must match the pure-Python backend within `1e-9`, and
+`train.py --backend c` must reach the same converged loss as
+`--backend python` within `1e-6` with all golden points correct. Do NOT
+expect C to be faster at demo tier — an entire epoch is only ~2-10 ms and
+the ~1-5 µs ctypes marshalling overhead per call swamps the compute. "C
+looks equal or slower at the tiny scale" is expected, not a bug, and must
+never be "fixed" by restructuring the demo.
+
+**Efficiency is demonstrated at the showcase tier** (`--layers 2,32,32,1
+--n-per-quadrant 50 --epochs 250 --lr 2.5 --log-every 5`, pure-Python
+epoch ~160 ms). There the C backend's compute advantage dwarfs
+marshalling and should measure ~30-80× faster per epoch. Always report
+showcase-tier numbers — via `compare_backends.py` and
+`benchmark_report.md` — alongside the demo-tier parity results.
+
 ## Scope
 Replace **only** `matmul` with a C implementation. `add_bias`,
 `transpose`, and `elementwise` (activations) stay pure Python in every
@@ -199,8 +219,18 @@ same wall-clock budget that pure Python hit at 256-512 — extend `--sizes`
 accordingly and let the "estimate first, ask before proceeding" logic from
 phase 1 handle it automatically.
 
-Produce `benchmark_report.md` (a simple script or manual step, agent's
-choice) with a table: `size | python (s) | c-naive (s) | c-blocked (s) |
+The showcase-tier training runs themselves are compared with
+`compare_backends.py`: it re-runs the showcase config per available
+backend, writes `benchmark_report.md` with a table of epoch time / phase
+split / speedup-vs-python / final loss / golden-check, and renders the
+animated log-scale plot from `benchmark_results.csv` + `benchmark_shaped.csv`
+(one line per backend/variant). This is the per-network companion to the
+square-sweep plot — both are required.
+
+Produce the final `benchmark_report.md` (via `compare_backends.py` — it
+also re-renders the report and plot from saved `logs/showcase_*` runs
+without retraining when called without arguments) with a table: `size |
+python (s) | c-naive (s) | c-blocked (s) |
 speedup (python/c-blocked)`. This is the deliverable that shows the story
 so far — save it, phase 3 appends to it rather than replacing it.
 
@@ -219,3 +249,7 @@ so far — save it, phase 3 appends to it rather than replacing it.
       the blocking implementation likely has a bug or `BLOCK_SIZE` is
       poorly tuned for this machine's cache).
 - [ ] `animate.py --log-dir logs/<c-run>` works unchanged, no edits needed.
+- [ ] Showcase-tier comparison: `compare_backends.py` shows c-blocked at
+      an order of magnitude (or better) speedup over python per epoch at
+      `[2,32,32,1]`/n=200, while demo-tier loss parity (1e-6) and the
+      golden points still hold.

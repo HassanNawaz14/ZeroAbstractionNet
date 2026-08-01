@@ -183,6 +183,17 @@ asm-vectorized, asm-blocked). This plot is the payoff artifact for the
 whole project — it should visually show each stage's improvement clearly
 on a log scale.
 
+Same two-tier rule as phase 2: correctness at demo tier (relative
+tolerance, golden points), efficiency at showcase tier (`--layers
+2,32,32,1 --n-per-quadrant 50 --epochs 250 --lr 2.5 --log-every 5`).
+`compare_backends.py` re-runs the showcase tier per backend; its table
+must list all six variants (python, c-naive, c-blocked, asm-scalar,
+asm-vectorized, asm-blocked) with per-epoch times and speedups, and the
+animated log-scale plot must show the full progression. `RESULTS.md`
+must report both tiers: demo-tier correctness per backend (golden points,
+loss parity) and showcase-tier speedups — the tiny-net comparison alone
+would show no benefit and is expected to look flat.
+
 ## Explicit non-goals for this phase (stop here, don't chase further)
 - No multithreading (no pthreads, no OpenMP-equivalent hand-rolled
   threading). Single-core only, matching the rest of the project's scope.
@@ -210,6 +221,8 @@ on a log scale.
       python < c-naive < c-blocked < asm-scalar < asm-vectorized <
       asm-blocked, with asm-blocked being the fastest but not required to
       beat any external BLAS reference.
+- [ ] `compare_backends.py` comparison table/plot shows the same staged
+      progression at showcase tier with per-epoch speedups.
 - [ ] `animate.py --log-dir logs/<asm-run>` works unchanged.
 - [ ] A short `RESULTS.md` at the project root summarizing: max
       network/matrix size trained in a fixed time budget at each phase,

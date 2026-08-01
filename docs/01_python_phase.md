@@ -191,6 +191,46 @@ Loop structure:
 5. Print epoch/loss to stdout every `--log-every` epochs too, for a quick
    terminal sanity check.
 
+## Two-tier run strategy — demo vs showcase
+
+All runs happen at one of two deliberate scales. Every tool built in this
+phase (`train.py`, `benchmark_matmul.py`, `profile_run.py`, `animate.py`,
+`analyze_run.py`) must keep working at both, and no default may drift
+toward the bigger one — the distinction is a project-wide invariant, not a
+phase-1 nicety.
+
+**Demo tier (default, pedagogy).** Architecture `[2, 4, 4, 1]` (the
+`config.py` default), 100 points (`--n-per-quadrant 25`),
+`--epochs 250 --lr 2.5`. This is what the classic deliverables are about:
+a decision boundary readable at a glance, the four golden points, the loss
+curve, and the 3-panel animation. All correctness checks (golden-point
+classification, cross-backend loss parity) are always done here.
+
+**Showcase tier (explicit, efficiency).** `--layers 2,32,32,1
+--n-per-quadrant 50` (200 points), `--epochs 250 --lr 2.5
+--log-every 5`. This is the tier where backend speedups are measured and
+displayed: a pure-Python epoch is ~160 ms here (vs ~5 ms at demo scale),
+so the ~1-5 µs ctypes marshalling overhead of a native backend call is
+negligible and the real compute speedup becomes visible in per-epoch
+phase times, in `analyze_run.py`'s shaped-matmul table, and in
+`compare_backends.py`'s comparison table and animated log-scale plot.
+
+```bash
+python train.py --layers 2,32,32,1 --n-per-quadrant 50 --epochs 250 \
+                 --lr 2.5 --log-every 5 --log-dir logs/showcase_python
+python animate.py --log-dir logs/showcase_python --out animations/showcase_python.mp4
+```
+
+Notes:
+- Never change `config.py` defaults to showcase scale; showcase runs are
+  explicit CLI flags only.
+- Probe grid: the 1600-point default probe costs ~0.8 s per logged epoch
+  in pure Python at showcase scale — keep `--log-every` at 5 (or higher)
+  for long Python showcase runs, or reduce `--probe-resolution`.
+- At showcase scale `animate.py` draws only the top ~300 weights per
+  layer by magnitude so the network diagram stays readable and frames
+  stay fast.
+
 ## Log schema (this is what `animate.py` consumes — keep it stable)
 One file per run: `logs/run_XXX/epochs.jsonl` (JSON Lines, one JSON object
 per logged epoch). Also write `logs/run_XXX/meta.json` once at start with
@@ -314,6 +354,9 @@ the dataset spec above and assert all four end up on the correct side of
       `profile_baseline.txt`, it's referenced in phase 2's motivation.
 - [ ] `animate.py` produces a working mp4/gif with all three panels
       synced and readable.
+- [ ] Both tiers work end-to-end: demo-tier defaults untouched, and a
+      showcase-tier Python run (`--layers 2,32,32,1 --n-per-quadrant 50
+      --epochs 250 --lr 2.5`) trains, logs, and animates correctly.
 - [ ] All tests in `tests/` pass.
 - [ ] No `import numpy` / `import torch` / `import tensorflow` anywhere
       except optionally inside a clearly separate, optional analysis

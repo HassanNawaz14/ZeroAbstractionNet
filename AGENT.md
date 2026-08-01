@@ -57,6 +57,32 @@ win — this file governs *process and conventions*, not the technical spec.
    tests/benchmarks and show the output; don't assert something passes
    without having run it in this session.
 
+## Two-tier run strategy — ALWAYS consider both tiers before planning anything
+
+The project deliberately runs at two scales. Before planning or executing
+any training, benchmark, profile, or animation work, state which tier each
+run targets; defaults never change tier.
+
+1. **Demo tier (defaults, pedagogy):** `[2,4,4,1]`, 100 points,
+   `--epochs 250 --lr 2.5`. The readable 3-panel animation, golden points,
+   and loss curve. All correctness checks (golden-point classification,
+   cross-backend loss parity) run here.
+2. **Showcase tier (efficiency):** `--layers 2,32,32,1 --n-per-quadrant 50`
+   (200 points), `--epochs 250 --lr 2.5 --log-every 5`. Where C/asm
+   speedups are measured and shown. A pure-Python epoch is ~160 ms here
+   vs ~5 ms at demo tier, making the ~1-5 µs ctypes marshalling overhead
+   of a native backend call negligible and the 30-80× compute speedup
+   real.
+
+Why this exists: at demo tier a native backend looks equal or slower
+(marshalling > compute), which would make the project's headline feature
+— measured C/asm speedups — invisible. Never "optimize the defaults up to
+showcase scale"; showcase runs are explicit CLI flags only. At showcase
+scale `animate.py` thins the network diagram to the top ~300 weights per
+layer. Efficiency claims must always cite showcase-tier numbers (via
+`compare_backends.py`, `benchmark_report.md`, `benchmark_results.csv`,
+`benchmark_shaped.csv`), never demo-tier timings.
+
 ## Environment assumptions
 - Linux or WSL2 (the phase-2/3 toolchain — `gcc`, `nasm`, `make`, ELF
   shared objects — assumes this; note clearly if you detect you're on

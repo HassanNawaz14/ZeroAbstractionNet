@@ -22,6 +22,7 @@ animations/*.gif
 
 # Benchmark output
 benchmark_results.csv
+benchmark_shaped.csv
 
 # Profile output
 *.txt
