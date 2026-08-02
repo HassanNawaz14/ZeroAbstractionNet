@@ -1,8 +1,8 @@
 """Training loop CLI.
 
 Usage:
-    python train.py --backend python --epochs 500 --lr 0.5 --n-per-quadrant 25 \
-                     --seed 0 --log-every 5 --log-dir logs/run_001
+    python train.py --backend python --epochs 250 --lr 2.5 --n-per-quadrant 25 \
+                     --seed 0 --log-every 5 --log-dir logs/run_001   # demo tier
     python train.py --layers 2,32,32,1 --n-per-quadrant 50 --epochs 250 \
                      --lr 2.5 --log-dir logs/showcase_python   # showcase tier
 """

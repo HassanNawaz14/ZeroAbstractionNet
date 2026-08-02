@@ -121,9 +121,9 @@ inference on every log step).
   `[-1/sqrt(fan_in), 1/sqrt(fan_in)]` using the seeded `random.Random`
   instance from `config.py`. Biases init to `0.0`.
 - Optimizer: plain full-batch gradient descent, fixed learning rate
-  (config default `lr=0.5`, since the dataset/network are tiny this
-  converges in a few hundred epochs — tune if needed but keep it simple,
-  no momentum/Adam).
+  (config default `lr=2.5` — the demo tier per the two-tier strategy in
+  section "Two-tier run strategy"; the dataset/network are tiny so this
+  converges in a few hundred epochs — keep it simple, no momentum/Adam).
 
 `network.py` contract:
 ```python
@@ -179,7 +179,7 @@ def get_backend(name: str):
 ## Training loop — `train.py`
 CLI (use `argparse`):
 ```
-python train.py --backend python --epochs 500 --lr 0.5 --n-per-quadrant 25 \
+python train.py --backend python --epochs 250 --lr 2.5 --n-per-quadrant 25 \
                  --seed 0 --log-every 5 --log-dir logs/run_001
 ```
 Loop structure:
