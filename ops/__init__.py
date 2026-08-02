@@ -9,9 +9,8 @@ def get_backend(name: str):
         from ops import backend_python as mod
         return mod
     if name == "c":
-        raise NotImplementedError(
-            "C backend not yet implemented (phase 2). Use --backend python."
-        )
+        from ops import backend_c as mod
+        return mod
     if name == "asm":
         raise NotImplementedError(
             "Assembly backend not yet implemented (phase 3). Use --backend python."
