@@ -17,8 +17,17 @@
 
 section .text
 
+; Cache block size for matmul_asm (phase-3 stage C). Rows are tiled in both
+; the output-row dimension and the k dimension (phase-2 strategy) with the
+; stage-B FMA inner loop running inside each tile; the 8-wide output-column
+; groups segment the m dimension (columns are always processed 8 at a time).
+; Tuned from phase 2's BLOCK_SIZE=96 (float32 tiles are half the bytes, so
+; the asm optimum may differ -- re-tune if stage C's sweep shows a shift).
+%define BLOCK_SIZE 96
+
 global matmul_asm_scalar
 global matmul_asm_vectorized
+global matmul_asm
 
 ; ------------------------------------------------------------------
 ; Stage A -- pure scalar float32 triple loop, NO SIMD.
@@ -207,6 +216,162 @@ matmul_asm_vectorized:
     cmp    rcx, r15
     jb     .vloop_i
 
+    vzeroupper
+    pop    r15
+    pop    r14
+    pop    r13
+    pop    r12
+    pop    rbp
+    pop    rbx
+    ret
+
+; ------------------------------------------------------------------
+; Stage C -- cache-blocked + vectorized (final default kernel).
+;
+; Tiling strategy from phase 2's matmul_blocked, SIMD body from stage B:
+;   outer  : output-row blocks (ii) and k-blocks (kk)
+;   middle : 8-wide output-column groups (j8)
+;   inner  : row i x p in [kk..k_end) FMA accumulation
+; C accumulates with += across k-blocks; the scalar tail handles the last
+; m%8 columns (this also covers m < 8 entirely, e.g. the golden k=2 -> m=2
+; case). BLOCK_SIZE is a %define above so it can be re-tuned.
+; Register map (after prologue):
+;   rsi=BLOCK_SIZE  r12=A  r13=B  r14=C  r15=n  rbx=k  rbp=m
+;   rcx=ii  r8=i_end  r9=k_end  r10=kk  r11=j8  rdi=i  rdx=p
+matmul_asm:
+    push   rbx
+    push   rbp
+    push   r12
+    push   r13
+    push   r14
+    push   r15
+
+    mov    r12, rdi            ; A
+    mov    r13, rsi            ; B
+    mov    r14, rdx            ; C
+    movsxd r15, ecx            ; n
+    movsxd rbx, r8d            ; k
+    movsxd rbp, r9d            ; m
+    mov    rsi, BLOCK_SIZE
+
+    ; ---- zero C ----
+    mov    rax, r15
+    imul   rax, rbp
+    lea    r10, [r14 + rax*4]
+    xorps  xmm0, xmm0
+    mov    r11, r14
+.zero_loop:
+    cmp    r11, r10
+    jae    .zero_done
+    movss  [r11], xmm0
+    add    r11, 4
+    jmp    .zero_loop
+.zero_done:
+
+    ; ---- outer row-block loop (ii) ----
+    xor    rcx, rcx
+.iblock:
+    cmp    rcx, r15
+    jae    .b_done
+    mov    r8, rcx
+    add    r8, rsi            ; i_end = ii + BLOCK_SIZE (capped at n)
+    cmp    r8, r15
+    cmova  r8, r15
+
+    ; ---- outer k-block loop (kk) ----
+    xor    r10, r10
+.kblock:
+    cmp    r10, rbx
+    jae    .iblock_next
+    mov    r9, r10
+    add    r9, rsi            ; k_end = kk + BLOCK_SIZE (capped at k)
+    cmp    r9, rbx
+    cmova  r9, rbx
+
+    ; ---- 8-wide output-column groups ----
+    xor    r11, r11
+.j8:
+    lea    rax, [r11 + 8]
+    cmp    rax, rbp
+    ja     .jtail
+    mov    rdi, rcx           ; i = ii
+.irow:
+    cmp    rdi, r8            ; i >= i_end?
+    jge    .j8_next
+    vpxor  ymm0, ymm0, ymm0   ; acc lanes for outputs j8..j8+7
+    mov    rdx, r10           ; p = kk
+.psum:
+    cmp    rdx, r9            ; p >= k_end?
+    jge    .store8
+    mov    rax, rdi
+    imul   rax, rbx
+    add    rax, rdx
+    vbroadcastss ymm1, [r12 + rax*4]   ; A[i*k + p] -> all 8 lanes
+    mov    rax, rdx
+    imul   rax, rbp
+    add    rax, r11
+    vmovups ymm2, [r13 + rax*4]        ; B[p*m + j8 .. +7]
+    vfmadd231ps ymm0, ymm1, ymm2
+    inc    rdx
+    jmp    .psum
+.store8:
+    mov    rax, rdi
+    imul   rax, rbp
+    add    rax, r11
+    vmovups ymm3, [r14 + rax*4]        ; existing C values (previous k-blocks)
+    vaddps ymm0, ymm0, ymm3
+    vmovups [r14 + rax*4], ymm0
+    inc    rdi
+    jmp    .irow
+.j8_next:
+    add    r11, 8
+    jmp    .j8
+
+    ; ---- scalar tail: columns j8..m-1 (all rows, current k-block) ----
+.jtail:
+    cmp    r11, rbp
+    jae    .kblock_next
+.tcol:
+    mov    rdi, rcx           ; i = ii
+.trow:
+    cmp    rdi, r8            ; i >= i_end?
+    jge    .tcol_next
+    xorps  xmm0, xmm0
+    mov    rdx, r10           ; p = kk
+.tp:
+    cmp    rdx, r9            ; p >= k_end?
+    jge    .tsum
+    mov    rax, rdi
+    imul   rax, rbx
+    add    rax, rdx
+    movss  xmm1, [r12 + rax*4]   ; A[i*k + p]
+    mov    rax, rdx
+    imul   rax, rbp
+    add    rax, r11
+    mulss  xmm1, [r13 + rax*4]   ; B[p*m + j]
+    addss  xmm0, xmm1
+    inc    rdx
+    jmp    .tp
+.tsum:
+    mov    rax, rdi
+    imul   rax, rbp
+    add    rax, r11
+    movss  xmm1, [r14 + rax*4]   ; existing C value
+    addss  xmm0, xmm1
+    movss  [r14 + rax*4], xmm0
+    inc    rdi
+    jmp    .trow
+.tcol_next:
+    inc    r11
+    jmp    .jtail
+
+.kblock_next:
+    add    r10, rsi
+    jmp    .kblock
+.iblock_next:
+    add    rcx, rsi
+    jmp    .iblock
+.b_done:
     vzeroupper
     pop    r15
     pop    r14
