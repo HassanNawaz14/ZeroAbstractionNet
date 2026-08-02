@@ -258,7 +258,7 @@ def _golden_ok(log_dir, meta):
     """Re-check the golden points from the last recorded weights."""
     try:
         from ops import get_backend
-        net = Network(meta["layer_sizes"], get_backend(meta["backend"]))
+        net = Network(meta["layer_sizes"], get_backend(meta["backend"]), meta["seed"])
         lines = open(os.path.join(log_dir, "epochs.jsonl")).readlines()
         rec = json.loads(lines[-1])
         net.weights = rec["weights"]
