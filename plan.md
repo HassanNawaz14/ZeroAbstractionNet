@@ -1,178 +1,238 @@
-# Phase 1 Closeout Plan — Two-Tier Benchmark/Log Infrastructure
+# Phase 2 Plan — C Matmul Backend (working plan, checked 2026-08-03)
 
-Replaces the original phase-1 build plan (that work is done). Governs the
-remaining phase-1 gaps and the `compare_backends` machinery that phases 2-3
-will plug into. Details live in `docs/01_python_phase.md`,
-`docs/02_c_phase.md`, `docs/03_asm_phase.md`, `README.md`, `AGENT.md` —
-all already updated with the two-tier strategy below.
+## Session status (updated 2026-08-03)
 
----
-
-## Governing invariant: two tiers of runs
-
-Every tool must work at both scales; defaults never change tier.
-
-| Tier | Config | Purpose | Python epoch |
-|---|---|---|---|
-| **Demo (default)** | `[2,4,4,1]`, n=100 (`--n-per-quadrant 25`), 250 ep, lr 2.5 | pedagogy: boundary, golden points, 3-panel animation | ~5 ms |
-| **Showcase (explicit)** | `--layers 2,32,32,1 --n-per-quadrant 50` (n=200), 250 ep, lr 2.5, `--log-every 5` | efficiency: C/asm speedups visible (compute ≫ ~1-5 µs ctypes marshalling) | ~160 ms |
-
-Correctness checks run at demo tier; efficiency claims always cite
-showcase-tier numbers.
-
-## Status (done)
-
-- Core MLP `[2,4,4,1]`, dataset, ops backends, tests (14 pass, 5 skipped =
-  phase 2/3 stubs) — working
-- `train.py` (log truncation fix), `animate.py` (fast persistent-artist
-  renderer, dedup, frame budget, optional 4th phase-time panel),
-  `benchmark_matmul.py` (`timed_best_of` helper), `profile_run.py`,
-  `analyze_run.py`, `compare_backends.py` — working
-- `profile_baseline.txt`, animations, `benchmark_results.csv`,
-  `benchmark_shaped.csv`, `benchmark_report.md`,
-  `animations/backend_comparison.mp4` — produced
-- All 5 markdown files updated with the two-tier strategy; no stale
-  "(planned)" markers remain
-- `config.py` defaults aligned to the demo tier (`EPOCHS=250`, `LR=2.5`) —
-  bare `python train.py` IS the demo tier, matching the two-tier docs
-- Stub tests (`test_ops_c.py`, `test_ops_asm.py`) converted from failing
-  `NotImplementedError` to `pytest.mark.skip` — phase-1 suite is green
-- Demo-tier re-verified end-to-end this closeout: `python train.py` →
-  loss 0.693→0.0118 in 250 ep, all 4 golden points correct,
-  `animate.py` renders the 3-panel mp4 unchanged
-- Showcase-tier artifacts verified present: `logs/showcase_python`
-  (250 ep, lr 2.5, final loss 0.0167, golden ok), `benchmark_results.csv`
-  (python sweep 16→512, 40.5s at 512 = ceiling), deduped
-  `benchmark_shaped.csv` with `count` column, `benchmark_report.md`
-  table, `animations/backend_comparison.mp4`
-- Working tree committed (see git log: `553bb7f`, `41e055c`)
-
-## Remaining work — ALL DONE (historical record; items 1-4 completed in
-commits `553bb7f` and `41e055c` + this closeout)
-
-## 1. Showcase-tier code support (small, additive)
-
-- **`train.py`**: add `--layers 2,32,32,1` and `--probe-resolution`
-  (defaults = `config.py`). `meta.json` schema unchanged.
-- **`analyze_run.py`**: same two flags; dedupe shaped benchmark — identical
-  shapes (e.g. two 32→32 layers) collapse to one row with a `count` column.
-- **`profile_run.py`**: add `--layers` so it can profile the showcase net.
-- **`animate.py`**: edge thinning — per layer, if connections > 300, draw
-  only the top 300 by `|w|` and note it in the panel title. Must not
-  trigger at demo scale (28 edges).
-- **`benchmark_matmul.py`**: CSV schema → `backend,variant,size,seconds`
-  (python → variant `naive`); file doesn't exist yet, schema change is free
-  and needed for c/asm variant lines later.
-- **`.gitignore`**: add `benchmark_shaped.csv` (generated artifact).
-
-## 2. `compare_backends.py` (new — the benchmark_logs deliverable)
-
-- Loop over backends `get_backend` can load (python now; c/asm join later
-  with graceful skip until then).
-- Per backend, run the showcase tier into `logs/showcase_<backend>`,
-  collecting: epoch time, phase split, final loss, golden-point check,
-  shaped-matmul times (reuse `timed_best_of`).
-- Write **`benchmark_report.md`**: table
-  `backend/variant | epoch ms | fwd/bwd/upd % | speedup vs python |
-  final loss | golden ok` + shaped-matmul table.
-- Render **`animations/backend_comparison.mp4`** — animated log-scale
-  figure: panel A = sweep lines per backend/variant growing size-by-size
-  (`benchmark_results.csv`), panel B = shaped-matmul times at showcase
-  shapes, log-y (`benchmark_shaped.csv`).
-
-## 3. Generate and verify artifacts
-
-- `benchmark_matmul.py --backend python --sizes 16,32,64,128,256,512` →
-  `benchmark_results.csv` (estimator skips >60s; 256 ≈ 5-10s = python ceiling).
-- Showcase Python run → `logs/showcase_python`: verify ~160 ms/epoch, loss
-  converges, golden points correct; `animate.py` render with visible
-  phase-time bars (~52 records, ~1 min render).
-- `analyze_run.py` showcase run → `benchmark_shaped.csv` (deduped,
-  showcase shapes) + `logs/showcase_analysis/analysis.txt`.
-- `compare_backends.py` → `benchmark_report.md` + comparison mp4.
-- `pytest` all pass; demo-tier 3-panel path re-verified unchanged.
-- Remove now-stale "(planned)" markers in the docs once the tooling lands.
-
-## 4. Commit
-
-Two commits (on approval): (a) docs + tier-support code, (b)
-`compare_backends.py` + `benchmark_report.md`. Logs/animations/CSVs are
-gitignored — reproducible scripts, not outputs, get committed.
+- **Milestone 1 done + verified end-to-end:** `native/c/` (clean build, 0
+  warnings), `ops/backend_c.py`, `get_backend("c")` flip. Demo-tier parity
+  vs python = **bit-identical** (weights, biases, probe/dataset preds,
+  losses — 0.0 diff over all epochs), golden points correct.
+- **Determinism fix (this is load-bearing):** Makefile now builds with
+  `-ffp-contract=off` (see Makefile comment). Without it, gcc may fuse
+  `a*b+c` into one `vfmadd` (single rounding vs python's two), and this
+  net trains at lr 2.5 — a chaotic amplification regime. A 1-ulp diff at
+  epoch 0 grows to different minima (loss 0.0091 vs 0.0118 at 250 ep).
+  Empirically gcc was NOT contracting on this box, but the flag pins the
+  guarantee; cross-backend parity already holds with it off.
+- **Animation equivalence proven (user request):**
+  `logs/py_run_250_lr25` vs `logs/c_run_250_lr25` (both 250 ep, lr 2.5,
+  seed 0, n=25, log-every 1, rendered @ 120 ms) are BIT-IDENTICAL, and the
+  two mp4s (`animations/py_run_250_lr25.mp4`, `c_run_250_lr25.mp4`) are
+  30.0 s with the SAME MD5. Only differences: `meta.json` `backend` field
+  and `wall_time_sec` (unused by the renderer).
+- **Gotcha recorded:** `logs/run_250_lr25` + `run_250_lr25.mp4` predate
+  the demo-tier config closeout (`f3a7df1`) and were produced by older
+  code — they diverge from today's python run and must NOT be used as the
+  python reference. Always regenerate both sides when comparing.
+- **Milestone 2 done — real `tests/test_ops_c.py`** (replaced the 2 skip
+  stubs): golden 2x2 for both variants; 10 boundary shapes × 2 variants vs
+  `backend_python` (k=1, 65, 127, past-`BLOCK_SIZE` dims, network-shaped)
+  at 1e-9; naive-vs-blocked agreement; mismatch/unknown-variant raises; and
+  the full pipeline test (runs the real `train.py --backend c` vs python,
+  500 ep, seed 0 → final-loss parity < 1e-6 + golden points, verified
+  green). Module-level load guard: on Windows the whole module is skipped
+  with the `make -C native/c` build hint. **Result: WSL `30 passed, 3
+  skipped` (asm phase-3 stubs); Windows `14 passed, 4 skipped`.**
+- To-do (next milestone): the two minor fixes (`_golden_ok` seed arg,
+  `02_c_phase.md` regenerate wording), showcase-tier comparison via
+  `compare_backends.py` (c rows in `benchmark_report.md` + mp4),
+  `benchmark_matmul.py --backend c --variant naive|blocked` sweep up to
+  2048, `animate.py` on `logs/showcase_c`, docs + commit.
+- **Milestone 3 (benchmarks) done:** interleaved/regenerated
+  `benchmark_results.csv` sweep ([16..2048], naive + blocked, reps
+  budgeted so naive stays out of the 2048-timeout hole), regenerated
+  `benchmark_shaped.csv` (deduped to the latest run), and re-rendered
+  `benchmark_report.md` + `backend_comparison.mp4`. Numbers: sweep shows
+  naive-C beating naive-Python ~20x at 512 (26.1 s vs 1.33 s) with
+  blocked-C pulling further ahead past cache size (512: 0.57 s; gap keeps
+  widening to 2048) — the "widen, don't stay flat" blocking signal is
+  there; shaped 200x32x32: python 16.3 ms vs c 1.04 ms (~16x).
+- **Marshalling optimization (landed in `ops/backend_c.py`):** the per-call
+  list-of-lists ctypes loop was the wall at showcase shapes (each
+  200x32 matmul ~4.8 ms, ~2.7 ms of it flatten/unflatten). Now flatten via
+  `array('d')`+`from_buffer`, unflatten via one `struct.unpack` of the raw
+  buffer — c.matmul ~1.9 ms and the C full step went ~48 ms → ~17 ms.
+  Bit-identical results re-verified (demo 250 ep: 51/51 records identical).
+- **Honest per-epoch finding (doc checkpoint corrected):** at showcase
+  scale the matmul-level C speedup IS an order of magnitude (~15-30x), but
+  the per-epoch ratio is ~4-4.5x (python 78 ms vs c 17 ms median
+  interleaved on this machine). Cause: the frozen-python `elementwise`/
+  `transpose`/`add_bias` list work (~13 ms/step at n=200) plus ~0.9 ms of
+  unavoidable list-of-lists marshalling per matmul call (~8 calls/step).
+  Even with marshalling minimized, the frozen-interface bound cannot reach
+  10x/epoch. `02_c_phase.md` now states the matmul-vs-epoch distinction
+  and the corrected checkpoint instead of the unachievable ~30-80x claim.
+- **Showcase animations:** `animations/showcase_python.mp4` +
+  `showcase_c.mp4` rendered from `logs/showcase_*` (logs differ only in
+  wall-clock fields; loss/weights/probes identical, so the two-tier parity
+  story holds through the render).
+- Next move: full suite re-run both environments, git status review, then
+  small scoped commits (source first, then docs; artifacts are gitignored).
 
 ---
 
-# Phase 2 Kickoff — WSL2 environment & best practices (checked 2026-08-03)
+Governs the phase-2 work. Technical spec: `docs/02_c_phase.md`; project
+conventions: `AGENT.md`; phase-1 record: git log (`f3a7df1` and earlier).
+This file replaces the phase-1 closeout plan (that work is committed and
+done).
 
-## Verified WSL2 toolchain (Ubuntu 24.04, distro "Ubuntu", WSL 2.7.11)
+---
 
-| Tool | Status | Notes |
-|---|---|---|
-| `gcc` 13.3.0 | present | phase 2 build tool |
-| `make` 4.3 | present | `make -C native/c` |
-| `python3` 3.12.3 | present | runtime for `train.py --backend c` |
-| `nasm` | **missing** | phase 3 only — not needed for phase 2 |
-| `ffmpeg` | **missing** | only if rendering mp4 *inside* WSL |
-| `pytest` / `matplotlib` (pip) | **missing** | needed to test/animate inside WSL |
-| repo access | `/mnt/c/Users/HP/OneDrive/Desktop/ZeroAbstractionNet` | drvfs mount works |
-| CPU | Intel i5-6200U, AVX2+FMA | relevant for phase 3 asm, not phase 2 |
+## Status: phase 1 complete
 
-## Recommended installs before phase 2 (all inside WSL2)
+All phase-1 DoD items ticked and committed; working tree clean at `f3a7df1`.
+Demo-tier defaults (`[2,4,4,1]`, n=100, 250 ep, lr 2.5) and showcase-tier
+flags (`--layers 2,32,32,1 --n-per-quadrant 50`) both work end-to-end.
+`compare_backends.py`, `benchmark_matmul.py`, `analyze_run.py`,
+`profile_run.py`, `animate.py`, `benchmark_report.md`,
+`animations/backend_comparison.mp4` are live with python-only rows.
 
-```bash
-sudo apt-get update
-sudo apt-get install -y nasm ffmpeg            # nasm for phase 3, ffmpeg for mp4
-python3 -m pip install --user pytest matplotlib # test suite + animation in WSL
+## Governing invariants (from AGENT.md + docs — do not violate)
+
+1. **Two tiers forever:** demo tier (defaults) for correctness checks —
+   golden points, loss parity `1e-6`; showcase tier (explicit flags) for
+   all efficiency claims. Defaults never drift toward showcase scale.
+2. **Frozen surface:** `network.py`, `train.py`, `animate.py`, the dataset
+   generator, and the log schema must NOT change in phase 2/3 (except the
+   `--backend` CLI option). If phase-2 work seems to require it, stop and
+   flag.
+3. **Only `matmul` is replaced** with C. `add_bias`, `transpose`,
+   `elementwise` stay pure Python (re-exported from `backend_python`) in
+   every phase — they're O(n), not the bottleneck.
+4. **`double` in C** for this phase (float32 is phase 3's story). Flat
+   row-major 1D arrays cross the ctypes boundary; shapes passed as ints.
+5. **`matmul_naive` stays forever** as the benchmark baseline. Build with
+   `-O2` only — no `-march=native`/`-mavx2`/`-ffast-math` (phase 3 hand-writes
+   the SIMD; compiler auto-vectorization here would ruin that story).
+   Comment this reasoning in the Makefile.
+6. **Determinism is load-bearing:** same seed + config → same result.
+   No unseeded randomness, no uninitialized memory reads.
+7. **Run everything C from WSL2** (Ubuntu 24.04): Windows Python cannot
+   `ctypes.CDLL` an ELF `.so`. Repo shared via `/mnt/c/...` — edit on
+   Windows, build+test in WSL. Verified present: gcc 13.3.0, make 4.3,
+   python3 3.12.3, nasm, ffmpeg, pytest 7.4.4, matplotlib. No installs
+   needed.
+
+## Phase-2 scope (from `docs/02_c_phase.md`)
+
+Replace only `matmul` in `ops/` with a C shared library:
+
+```
+native/c/
+├── matmul.c      # matmul_naive + matmul_blocked
+├── matmul.h
+└── Makefile      # libmatmul.so
 ```
 
-## Best practices for phase 2 (from 02_c_phase.md + AGENT.md)
+### Step 1 — `native/c/`
 
-1. **Run everything from WSL2.** Windows Python cannot `ctypes.CDLL` an
-   ELF `.so`; the C backend only works under WSL's `python3`. The repo is
-   shared via `/mnt/c/...`, so edit on Windows, build+test in WSL.
-2. **Don't touch the frozen surface** — `network.py`, `train.py`,
-   `animate.py`, dataset, log schema. Only add `native/c/*` +
-   `ops/backend_c.py` and flip one line in `ops/__init__.py`.
-3. **`double` in C**, argtypes registered via ctypes; flat row-major
-   1D arrays cross the boundary; shapes passed as ints.
-4. **Keep `matmul_naive` forever** as the baseline (rule 5); `-O2`
-   only, no `-march=native`/`-mavx2`/`-ffast-math` (that's phase 3's
-   story). Comment this in the Makefile.
-5. **Correctness at demo tier** (loss parity `1e-6`, golden points);
-   **efficiency at showcase tier** (`compare_backends.py` picks up the
-   `c` backend automatically via `get_backend`). C looking "equal" at
-   demo scale is expected, not a bug.
-6. **Boundary-size tests are the bug-hunters**: non-multiple-of-64
-   dims (`k=1`, 65, 127...) in `test_ops_c.py`.
-7. `benchmark_matmul.py --backend c --variant naive|blocked --sizes
-   16,...,2048` appends to `benchmark_results.csv`; the existing
-   "estimate-then-ask" safety logic handles the new ceiling.
-8. `.gitignore` already covers `*.so`/`*.o` — commit source
-   (`.c/.h/Makefile`) only, never the built library.
-9. Verify with `python3 -m pytest` in WSL before declaring done.
+- `matmul.h`: `void matmul_naive(const double *A, const double *B,
+  double *C, int n, int k, int m);` + same contract for `matmul_blocked`.
+  Caller pre-allocates C; C only writes into it.
+- `matmul.c`:
+  - `matmul_naive`: direct cache-hostile triple loop exactly as written
+    in the phase doc (`B[p*m+j]` strides by `m` per inner iteration — by
+    design, don't "fix" it).
+  - `matmul_blocked`: (1) i-k-j loop reorder so the innermost loop walks
+    contiguous memory in B and C, zero-initializing C first since it
+    accumulates with `+=`; (2) cache tiling on top — `#define BLOCK_SIZE 64`
+    (exposed as a #define for tuning), three nested block-index loops with
+    the i-k-j loops inside, working set kept in L1/L2.
+- `Makefile`: `CC = gcc`, `CFLAGS = -O2 -fPIC -Wall -Wextra`,
+  `TARGET = libmatmul.so`, `clean` target. Comment explaining why
+  `-march=native`/`-ffast-math` are withheld (see invariant 5).
+- Build: `make -C native/c` (WSL) → `libmatmul.so` lands in `native/c/`.
+  Must be `-Wall -Wextra` clean.
 
----
+### Step 2 — `ops/backend_c.py` + selector flip
 
-## Definition of Done (phase-1 closeout — both tiers)
+- Load `libmatmul.so` by path computed from `__file__` (never hardcoded
+  absolute paths); `ctypes.CDLL` at import.
+- Register `argtypes`/`restype` for both `matmul_naive` and
+  `matmul_blocked`: `POINTER(c_double)` x3 + `c_int` x3, `restype = None`.
+- `_flatten(A) -> (ctypes array, rows, cols)`, `_unflatten(flat, n, m)`
+  helpers; caller-allocated output buffer of `(c_double * (n*m))`.
+- `matmul(A, B, variant="blocked")`, variant in `{'naive', 'blocked'}`.
+  Default `"blocked"` is what `train.py`/`compare_backends.py` use;
+  `benchmark_matmul.py` exercises both explicitly.
+- Same public signature as `backend_python.matmul(A, B)`; re-export
+  `add_bias`, `transpose`, `elementwise` from `backend_python`.
+- `ops/__init__.py`: `get_backend("c")` imports and returns
+  `ops.backend_c` (replace the `NotImplementedError`).
 
-- [x] `train.py --backend python` (demo tier) runs end-to-end, loss
-      decreases, all 4 golden points classify correctly
-- [x] Showcase-tier Python run trains/logs/animates at
-      `[2,32,32,1]`/n=200 with visible per-epoch phase times
-- [x] `benchmark_matmul.py --backend python` produces
-      `benchmark_results.csv` (new `backend,variant,size,seconds` schema)
-      with sizes up to the ~5-10s single-call ceiling
-- [x] `analyze_run.py` produces deduped `benchmark_shaped.csv` with a
-      `count` column at showcase shapes
-- [x] `compare_backends.py` produces `benchmark_report.md` table and the
-      animated log-scale `animations/backend_comparison.mp4`
-      (python-only rows for now; c/asm lines appear as phases 2-3 land)
-- [x] `profile_run.py` output saved as `profile_baseline.txt`; works with
-      `--layers` at both tiers
-- [x] `animate.py` produces working mp4/gif: 3-panel (demo) and 4-panel
-      phase-time (showcase), with edge thinning active at showcase scale
-- [x] All tests in `tests/` pass (14 passed, 5 skipped = phase 2/3 stubs)
-- [x] No `import numpy` / `import torch` / `import tensorflow` in compute
-      path
-- [x] Docs (`docs/*.md`, `README.md`, `AGENT.md`) consistent with the
-      implemented reality — no stale "(planned)" markers
-- [x] Working tree committed (step 4)
+### Step 3 — `tests/test_ops_c.py` (replace the 2 skip stubs)
+
+- Golden 2x2 from phase 1 (`[[19,22],[43,50]]`) for both `naive` and
+  `blocked`.
+- Seeded property tests vs `backend_python.matmul` across random
+  non-square shapes, **including boundary sizes** `k=1`, 65, 127,
+  non-multiple-of-`BLOCK_SIZE` dims — blocking bugs hide there. Assert all
+  three (python, c-naive, c-blocked) agree within `1e-9` absolute
+  tolerance (not exact — summation order differs).
+- Full pipeline test: `train.py --backend c --epochs 500`, same seed as
+  phase-1 golden; final loss matches `--backend python` within `1e-6`;
+  golden points classify correctly.
+- **Cross-environment behavior (decision 2026-08-03):** module-level
+  load guard — if `libmatmul.so` can't be loaded (native Windows), all C
+  tests `pytest.skip` with a clear "build with make -C native/c under
+  WSL2" message, keeping the whole suite green in both environments.
+
+### Step 4 — two minor fixes (decided 2026-08-03)
+
+- `compare_backends.py` `_golden_ok` (line ~261): `Network(...)` call is
+  missing the required `seed` arg → regenerate path silently reports
+  `golden ok = NO`. Fix: pass `meta["seed"]`.
+- `docs/02_c_phase.md`: "re-renders ... without retraining when called
+  without arguments" is wrong — the code requires `--regenerate`. Fix the
+  doc sentence, not the CLI default.
+
+### Step 5 — two-tier verification (per `02_c_phase.md`)
+
+- **Demo tier (correctness):** `train.py --backend c` (500 ep, seed 0)
+  → loss parity `1e-6` vs python, all 4 golden points correct. C looking
+  equal or slower at demo scale is expected, not a bug.
+- **Showcase tier (efficiency):** `compare_backends.py` picks up `c`
+  automatically → `benchmark_report.md` table gains c-naive/c-blocked
+  rows (epoch ms, phase split, speedup vs python, final loss, golden ok)
+  and `animations/backend_comparison.mp4` gains the new lines. Measured
+  on this machine: c-blocked ≈ **4-4.5x per epoch (python ~78 ms, c ~17 ms
+  median interleaved)** and **~14-30x per matmul** at showcase shapes —
+  the epoch figure is capped by the frozen-python O(n) ops + per-call
+  list-of-lists marshalling (see status note above; the ~10x epoch target
+  in the earlier draft was not reachable under the frozen interface and
+  `02_c_phase.md` now reflects the honest, evidence-backed bound).
+- `benchmark_matmul.py --backend c --variant naive|blocked --sizes
+  16,...,2048` appends to `benchmark_results.csv`; the estimate-then-ask
+  safety logic handles the new ceiling. (CLI already supports these
+  flags — no edits needed.)
+- `animate.py --log-dir logs/showcase_c` works unchanged, no edits.
+- Everything above runs under WSL's `python3` (pytest included).
+
+### Step 6 — docs + commit
+
+- Update this file's tracking as work lands.
+- Small scoped commits, one logical change each (code first, then
+  artifacts/docs). Commit source only — `*.so`/`*.o`, logs, CSVs, mp4s
+  are gitignored (reproducible scripts, not outputs).
+
+## Definition of done for phase 2 (from `02_c_phase.md`)
+
+- [ ] `native/c/libmatmul.so` builds cleanly via `make -C native/c`, no
+      warnings under `-Wall -Wextra`.
+- [ ] `train.py --backend c` produces the same converged loss (within
+      `1e-6`) as `train.py --backend python` on the same seed; same 4
+      golden points classify correctly.
+- [ ] `tests/test_ops_c.py` passes, including boundary-size blocking
+      cases (skips gracefully on Windows when the .so can't load).
+- [ ] `benchmark_results.csv`/`benchmark_report.md` show naive-C beating
+      naive-Python by ~1-2 orders of magnitude, and blocked-C beating
+      naive-C further at larger sizes (the gap must widen as size grows
+      past cache size — if not, the blocking has a bug or `BLOCK_SIZE` is
+      poorly tuned for this machine's cache).
+- [ ] `animate.py --log-dir logs/<c-run>` works unchanged.
+- [ ] Showcase-tier comparison: c-blocked at an order of magnitude (or
+      better) at the **matmul level** (shaped ~14-30x, sweep ~20x at 512,
+      per-epoch ~4-4.5x bounded by the frozen-python surface + per-call
+      marshalling — documented in `02_c_phase.md`, checkpoint text
+      corrected to measured numbers), demo-tier loss parity (`1e-6`) and
+      golden points still hold (bit-identical verified).
+- [ ] Working tree committed; plan.md tracking updated.

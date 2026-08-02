@@ -24,11 +24,26 @@ looks equal or slower at the tiny scale" is expected, not a bug, and must
 never be "fixed" by restructuring the demo.
 
 **Efficiency is demonstrated at the showcase tier** (`--layers 2,32,32,1
---n-per-quadrant 50 --epochs 250 --lr 2.5 --log-every 5`, pure-Python
-epoch ~160 ms). There the C backend's compute advantage dwarfs
-marshalling and should measure ~30-80× faster per epoch. Always report
-showcase-tier numbers — via `compare_backends.py` and
-`benchmark_report.md` — alongside the demo-tier parity results.
+--n-per-quadrant 50 --epochs 250 --lr 2.5 --log-every 5`). Where the speedup
+shows up — and how big it is — is the honest measurement here, because the
+epoch's wall-clock is **not** all matmul:
+
+- At the **matmul level** the C backend is an order of magnitude (or more)
+  ahead: the shaped benchmark at n=200 measures python `200x32x32` @ ~16 ms
+  vs c ~1 ms (15-30×), and the square sweep (c-naive vs c-blocked) shows the
+  same and grows past cache size.
+- At the **per-epoch level** (fwd+bwd+upd, `compare_backends.py`) the same
+  run measures python ~78 ms vs c ~17 ms median on this machine (interleaved
+  sampling) — roughly 4-4.5×, NOT ~30-80×. Two frozen pieces cap it: (1)
+  `add_bias`, `transpose`, `elementwise` stay pure Python (phase-2 scope)
+  and at n=200 their list work is ~13 ms/epoch; (2) every `matmul` crosses
+  the boundary as list-of-lists, so each ~200x32 call pays ~0.9 ms of
+  flatten/unflatten plus ctypes overhead (~8 calls/epoch ≈ 7-9 ms) — even
+  with the bulk `array('d')`+`struct.unpack` handoff in `backend_c.py`.
+
+So report both numbers: the matmul-level figure IS the order-of-magnitude
+claim of this phase; the per-epoch ratio is the interface-bounded upper
+bound and must not be editorialized higher.
 
 ## Scope
 Replace **only** `matmul` with a C implementation. `add_bias`,
@@ -229,7 +244,7 @@ square-sweep plot — both are required.
 
 Produce the final `benchmark_report.md` (via `compare_backends.py` — it
 also re-renders the report and plot from saved `logs/showcase_*` runs
-without retraining when called without arguments) with a table: `size |
+without retraining via `--regenerate`) with a table: `size |
 python (s) | c-naive (s) | c-blocked (s) |
 speedup (python/c-blocked)`. This is the deliverable that shows the story
 so far — save it, phase 3 appends to it rather than replacing it.
@@ -249,7 +264,10 @@ so far — save it, phase 3 appends to it rather than replacing it.
       the blocking implementation likely has a bug or `BLOCK_SIZE` is
       poorly tuned for this machine's cache).
 - [ ] `animate.py --log-dir logs/<c-run>` works unchanged, no edits needed.
-- [ ] Showcase-tier comparison: `compare_backends.py` shows c-blocked at
-      an order of magnitude (or better) speedup over python per epoch at
-      `[2,32,32,1]`/n=200, while demo-tier loss parity (1e-6) and the
-      golden points still hold.
+- [ ] Showcase-tier comparison: `compare_backends.py` shows c beating python
+      per epoch at `[2,32,32,1]`/n=200 (measured ~4-4.5× steady-state on this
+      machine: python ~78 ms vs c ~17 ms median), bounded by the frozen-python
+      ops and per-call list-of-lists marshalling — see the matmul-level vs
+      epoch-level note above), with c-vs-python **matmul** speedups of
+      ~15-30× at the same shapes in `benchmark_shaped.csv`. Demo-tier loss
+      parity (1e-6) and golden points still hold (verified bit-identical).
