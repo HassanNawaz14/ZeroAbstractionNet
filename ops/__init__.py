@@ -12,7 +12,6 @@ def get_backend(name: str):
         from ops import backend_c as mod
         return mod
     if name == "asm":
-        raise NotImplementedError(
-            "Assembly backend not yet implemented (phase 3). Use --backend python."
-        )
+        from ops import backend_asm as mod
+        return mod
     raise ValueError(f"Unknown backend: {name!r}. Choose from: python, c, asm.")
