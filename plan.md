@@ -89,6 +89,11 @@ the worst possible README embed.
       (reel done 2026-08-04: 17 s, 1080×1080, 8 fps, 91 KB; verified by
       `python present/verify_frames.py` — canvas, caption band, 3 lanes
       fill+motion+ratio, budget line, headline text.)
+      (drill-down done 2026-08-04: 30 s, 1920×1080, 24 fps, 1.75 MB;
+      verified by `python present/verify_frames.py --spec stack` — canvas,
+      intro title, per-phase code highlights with no cross-phase bleed,
+      C-grid fills, breadcrumb chip, outro stack. Parallel frame renderer
+      (`--frames/--fps/--workers`) keeps wall-clock bounded.)
 - [ ] (Stretch) `present/recut_comparison.py` re-encodes the existing
       `backend_comparison.mp4` with endpoint "×237" annotation + 1 s hold;
       `compare_backends.py` untouched.

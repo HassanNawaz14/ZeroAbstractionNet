@@ -26,6 +26,14 @@ from animate_budget import (  # noqa: E402  (palette + layout are the spec)
     LANE_STRIPS,
     PALETTE,
 )
+from animate_stack import (  # noqa: E402
+    CHIP_BOX,
+    CODE_PANEL,
+    GRIDS,
+    LEVEL_COLORS,
+    OUTRO_STACK_BOX,
+    TITLE_BOX,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +160,57 @@ def _check_budget(mp4_path):
           f"asm-blocked={counts_end['asm-blocked']}")
 
 
-SPECS = {"budget": _check_budget}
+def _check_stack(mp4_path):
+    w, h, duration, fps = probe_streams(mp4_path)
+    _check_canvas(w, h, (1920, 1080))
+    assert duration > 0, "empty video"
+
+    intro = decode_frame(mp4_path, 1.5)
+    py = decode_frame(mp4_path, 8.0)
+    ct = decode_frame(mp4_path, 12.5)
+    c_ = decode_frame(mp4_path, 16.0)
+    asm = decode_frame(mp4_path, 22.0)
+    out = decode_frame(mp4_path, max(duration - 0.6, duration * 0.9))
+
+    title = count_in_region(intro[2], w, h, *TITLE_BOX, PALETTE["TEXT"])
+    assert title >= 1000, f"intro title missing ({title} px)"
+
+    for label, frame, colour in (
+        ("python", py, LEVEL_COLORS["python"]),
+        ("ctypes", ct, LEVEL_COLORS["ctypes"]),
+        ("c", c_, LEVEL_COLORS["c"]),
+        ("asm", asm, LEVEL_COLORS["asm"]),
+    ):
+        n = count_in_region(frame[2], w, h, *CODE_PANEL, colour)
+        assert n >= 200, f"{label} phase: highlight colour missing in code panel ({n} px)"
+
+    others_py = count_in_region(asm[2], w, h, *CODE_PANEL, LEVEL_COLORS["python"])
+    assert others_py == 0, f"asm phase still shows python highlight ({others_py} px)"
+    others_asm = count_in_region(c_[2], w, h, *CODE_PANEL, LEVEL_COLORS["asm"])
+    assert others_asm == 0, f"c phase still shows asm highlight ({others_asm} px)"
+
+    c_grid = count_in_region(asm[2], w, h, *GRIDS["C"], LEVEL_COLORS["asm"])
+    assert c_grid >= 1000, f"asm lanes not filling C grid ({c_grid} px)"
+    c_grid_py = count_in_region(py[2], w, h, *GRIDS["C"], LEVEL_COLORS["python"])
+    assert c_grid_py >= 500, f"python time-lapse not filling C grid ({c_grid_py} px)"
+
+    chip = count_in_region(asm[2], w, h, *CHIP_BOX, LEVEL_COLORS["asm"])
+    assert chip >= 200, f"asm breadcrumb chip missing ({chip} px)"
+
+    for name, colour in LEVEL_COLORS.items():
+        n = count_in_region(out[2], w, h, *OUTRO_STACK_BOX, colour)
+        assert n >= 100, f"outro missing {name} panel ({n} px)"
+
+    print("stack spec OK: canvas 1920x1080, intro title, per-phase code highlights "
+          "(no cross-phase bleed), C-grid fills, breadcrumb chip, outro stack")
+    print(f"code-panel highlight px: "
+          f"python={count_in_region(py[2], w, h, *CODE_PANEL, LEVEL_COLORS['python'])} "
+          f"ctypes={count_in_region(ct[2], w, h, *CODE_PANEL, LEVEL_COLORS['ctypes'])} "
+          f"c={count_in_region(c_[2], w, h, *CODE_PANEL, LEVEL_COLORS['c'])} "
+          f"asm={count_in_region(asm[2], w, h, *CODE_PANEL, LEVEL_COLORS['asm'])}")
+
+
+SPECS = {"budget": _check_budget, "stack": _check_stack}
 
 
 def main():
