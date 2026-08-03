@@ -332,6 +332,109 @@ def write_report(results=None, sweep_path="benchmark_results.csv",
     return out
 
 
+# Shared line styling for the comparison plots (animated mp4 + static png):
+# one colour ramp per backend family, darkening as the implementation gets
+# faster (python stays the grey reference baseline). Two lines in the same
+# family share the shade so the ramp is obvious; the marker additionally
+# differs per stage so lines stay distinguishable even in monochrome.
+_FAMILY = {"python": "Python", "c": "C", "asm": "asm"}
+_VARIANT = {
+    "naive": "naive",
+    "scalar": "scalar (stage A)",
+    "vectorized": "vectorized (stage B)",
+    "blocked": "blocked (final)",
+}
+_SWEEP_STYLE = {
+    "python-naive": ("#4f4f4f", "o"),
+    "c-naive": ("#9dc3e8", "^"),
+    "c-blocked": ("#1f4e9c", "s"),
+    "asm-scalar": ("#ffd884", "^"),
+    "asm-vectorized": ("#f5a01d", "s"),
+    "asm-blocked": ("#b3340d", "D"),
+}
+_FAMILY_COLOR = {"python": "#4f4f4f", "c": "#1f4e9c", "asm": "#f5a01d"}
+
+
+def _display_label(key: str) -> str:
+    family, _, variant = key.partition("-")
+    return f"{_FAMILY.get(family, family)} {_VARIANT.get(variant, variant)}"
+
+
+def _flops(shape) -> float:
+    m, k, n = shape
+    return 2.0 * m * k * n
+
+
+def _format_axes(ax1, ax2, sweep: dict, shaped: dict):
+    """Shared axis setup (scales, labels, titles, grids, limits, legends)
+    for both panels. Used by the animated figure and the static companion."""
+    max_y = 0.0
+    for pts in sweep.values():
+        max_y = max(max_y, max(t for _, t in pts))
+    for pts in shaped.values():
+        max_y = max(max_y, max(t for _, t in pts))
+
+    ax1.set_xscale("log", base=2)
+    ax1.set_yscale("log")
+    ax1.set_xlabel("Matrix size n (n x n)")
+    ax1.set_ylabel("Seconds (best-of-N)")
+    ax1.set_title("Matmul sweep (log-log)")
+    ax1.grid(True, which="both", alpha=0.3)
+    ax1.legend(loc="upper left", fontsize=8, framealpha=0.95,
+               edgecolor="0.6", title="Implementation", title_fontsize=9)
+
+    ax2.set_xscale("log")
+    ax2.set_yscale("log")
+    ax2.set_xlabel("FLOPs (2*M*K*N)")
+    ax2.set_ylabel("Seconds")
+    ax2.set_title("Shaped matmul at network shapes (log-log)")
+    ax2.grid(True, which="both", alpha=0.3)
+    ax2.legend(loc="upper left", fontsize=8, framealpha=0.95,
+               edgecolor="0.6", title="Backend", title_fontsize=9)
+
+    sweep_sizes = sorted({s for v in sweep.values() for s, _ in v})
+    if sweep_sizes:
+        ax1.set_xlim(sweep_sizes[0] / 2, sweep_sizes[-1] * 2)
+    if shaped:
+        flops = [_flops(shape) for v in shaped.values() for shape, _ in v]
+        ax2.set_xlim(min(flops) / 2, max(flops) * 2)
+    if max_y > 0:
+        ax1.set_ylim(1e-5, max_y * 5)
+        ax2.set_ylim(1e-5, max_y * 5)
+
+
+def _render_static(sweep: dict, shaped: dict, out: str, dpi: int = 140) -> str:
+    """Static companion to the mp4: a fresh figure with every sweep/shaped
+    line drawn at its FULL extent. Dedicated figure so the png never depends
+    on whatever frame the animation happens to be sitting on."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
+
+    for label in sorted(sweep):
+        color, marker = _SWEEP_STYLE.get(label, ("#888888", "o"))
+        ax1.plot([s for s, _ in sweep[label]], [t for _, t in sweep[label]],
+                 marker=marker, label=_display_label(label),
+                 color=color, lw=1.8, ms=6, mfc="white")
+
+    for backend in sorted(shaped):
+        ax2.plot([_flops(shape) for shape, _ in shaped[backend]],
+                 [t for _, t in shaped[backend]],
+                 marker="s", label=_display_label(backend),
+                 color=_FAMILY_COLOR.get(backend, "#888888"),
+                 lw=1.8, ms=6, mfc="white")
+
+    fig.suptitle("ZeroAbstractionNet — native matmul backends", fontsize=13)
+    _format_axes(ax1, ax2, sweep, shaped)
+    fig.tight_layout(rect=(0, 0, 1, 0.92))
+    fig.savefig(out, dpi=dpi)
+    plt.close(fig)
+    return out
+
+
 def render_plot(sweep_path="benchmark_results.csv",
                 shaped_path="benchmark_shaped.csv", out="animations/backend_comparison.mp4",
                 dpi=100):
@@ -350,86 +453,22 @@ def render_plot(sweep_path="benchmark_results.csv",
 
     sweep_sizes = sorted({s for v in sweep.values() for s, _ in v})
 
-    # Human-readable labels (raw keys are the snake_case CSV backend-variant).
-    _FAMILY = {"python": "Python", "c": "C", "asm": "asm"}
-    _VARIANT = {
-        "naive": "naive",
-        "scalar": "scalar (stage A)",
-        "vectorized": "vectorized (stage B)",
-        "blocked": "blocked (final)",
-    }
-
-    def display_label(key: str) -> str:
-        family, _, variant = key.partition("-")
-        return f"{_FAMILY.get(family, family)} {_VARIANT.get(variant, variant)}"
-
-    # One colour ramp per backend family, darkening as the implementation
-    # gets faster (python stays the grey reference baseline). Two lines in
-    # the same family also share the shade so the ramp is obvious; the
-    # marker additionally differs per stage so the lines are distinguishable
-    # even in monochrome.
-    _SWEEP_STYLE = {
-        "python-naive":    ("#4f4f4f", "o"),
-        "c-naive":         ("#9dc3e8", "^"),
-        "c-blocked":       ("#1f4e9c", "s"),
-        "asm-scalar":      ("#ffd884", "^"),
-        "asm-vectorized":  ("#f5a01d", "s"),
-        "asm-blocked":     ("#b3340d", "D"),
-    }
-    _FAMILY_COLOR = {"python": "#4f4f4f", "c": "#1f4e9c", "asm": "#f5a01d"}
-
     lines1 = []
     for label in sorted(sweep):
-        color, marker = _SWEEP_STYLE.get(
-            label, (plt.cm.tab20(list(_SWEEP_STYLE).index(label) % 20), "o")
-        )
-        line, = ax1.plot([], [], marker=marker, label=display_label(label),
+        color, marker = _SWEEP_STYLE.get(label, ("#888888", "o"))
+        line, = ax1.plot([], [], marker=marker, label=_display_label(label),
                          color=color, lw=1.8, ms=6, mfc="white")
         lines1.append(line)
-    ax1.set_xscale("log", base=2)
-    ax1.set_yscale("log")
-    ax1.set_xlabel("Matrix size n (n x n)")
-    ax1.set_ylabel("Seconds (best-of-N)")
-    ax1.set_title("Matmul sweep (log-log)")
-    ax1.grid(True, which="both", alpha=0.3)
-    ax1.legend(loc="upper left", fontsize=8, framealpha=0.95,
-               edgecolor="0.6", title="Implementation", title_fontsize=9)
 
     lines2 = []
     for backend in sorted(shaped):
-        line, = ax2.plot([], [], marker="s", label=display_label(backend),
+        line, = ax2.plot([], [], marker="s", label=_display_label(backend),
                          color=_FAMILY_COLOR.get(backend, "#888888"),
                          lw=1.8, ms=6, mfc="white")
         lines2.append(line)
-    ax2.set_xscale("log")
-    ax2.set_yscale("log")
-    ax2.set_xlabel("FLOPs (2*M*K*N)")
-    ax2.set_ylabel("Seconds")
-    ax2.set_title("Shaped matmul at network shapes (log-log)")
-    ax2.grid(True, which="both", alpha=0.3)
-    ax2.legend(loc="upper left", fontsize=8, framealpha=0.95,
-               edgecolor="0.6", title="Backend", title_fontsize=9)
 
     fig.suptitle("ZeroAbstractionNet — native matmul backends", fontsize=13)
-
-    def _flops(shape):
-        m, k, n = shape
-        return 2.0 * m * k * n
-
-    max_y = 0.0
-    for label, pts in sweep.items():
-        max_y = max(max_y, max(t for _, t in pts))
-    for backend, pts in shaped.items():
-        max_y = max(max_y, max(t for _, t in pts))
-    if sweep_sizes:
-        ax1.set_xlim(sweep_sizes[0] / 2, sweep_sizes[-1] * 2)
-    if shaped:
-        flops = [_flops(shape) for v in shaped.values() for shape, _ in v]
-        ax2.set_xlim(min(flops) / 2, max(flops) * 2)
-    if max_y > 0:
-        ax1.set_ylim(1e-5, max_y * 5)
-        ax2.set_ylim(1e-5, max_y * 5)
-
+    _format_axes(ax1, ax2, sweep, shaped)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
 
     def update(frame):
@@ -451,18 +490,12 @@ def render_plot(sweep_path="benchmark_results.csv",
         print(f"Rendering comparison animation ({frames} frames)...")
         anim.save(out, writer="ffmpeg", dpi=dpi)
         print(f"Animation saved to {out}")
+        png_out = out.replace(".mp4", ".png")
+        _render_static(sweep, shaped, png_out, dpi=140)
+        print(f"Static plot saved to {png_out}")
     else:
         print("No sweep data - saving static plot only")
         fig.savefig(out.replace(".mp4", ".png"), dpi=dpi)
-
-    # Static companion for the mp4 (embeddable in a post): draw the final
-    # frame (every line at its full extent) and export a standalone PNG.
-    if frames > 0:
-        update(frames - 1)
-        fig.canvas.draw()
-        png_out = out.replace(".mp4", ".png")
-        fig.savefig(png_out, dpi=140)
-        print(f"Static plot saved to {png_out}")
 
 
 def main():
