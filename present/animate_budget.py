@@ -1,0 +1,251 @@
+"""Render the "same 5-second budget" progress reel (plan.md Build 1).
+
+Three lanes (python-naive / c-blocked / asm-blocked) fill with completed
+math (flops) over a fixed 5 s wall-clock budget. A marker chip lands on each
+lane when that backend completes its largest n x n matmul that fits in the
+budget: python n=256 (2.64 s), c-blocked n=1024 (3.11 s), asm-blocked
+n=2048 (4.96 s) — 8x the matrix size, 512x the math, same wall clock.
+
+This module also owns the colour palette + layout geometry constants that
+`verify_frames.py` imports for pixel verification, so the verification spec
+can never drift from what the renderer actually draws.
+
+Usage:
+    python present/animate_budget.py [--out present/budget_reel.mp4]
+    python present/animate_budget.py --still 5.0   # dump a single PNG frame
+"""
+
+import argparse
+import csv
+import os
+import sys
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.animation import FFMpegWriter, FuncAnimation
+
+# ---------------------------------------------------------------------------
+# Palette (single source of truth — verify_frames.py imports this)
+# ---------------------------------------------------------------------------
+PALETTE = {
+    "BG": "#0E1116",
+    "PANEL": "#1B222C",
+    "LANE_PY": "#F0563B",
+    "LANE_C": "#3FA7FF",
+    "LANE_ASM": "#3DDC84",
+    "TEXT": "#F2F4F8",
+    "DIM": "#8A94A6",
+    "ACCENT": "#F5C451",
+    "CAPTION_BG": "#151A22",
+}
+
+LANES = {
+    "python-naive": ("python", "naive", PALETTE["LANE_PY"], "PYTHON", "naive"),
+    "c-blocked": ("c", "blocked", PALETTE["LANE_C"], "C", "blocked"),
+    "asm-blocked": ("asm", "blocked", PALETTE["LANE_ASM"], "ASM", "blocked"),
+}
+
+BUDGET_SEC = 5.0
+
+# ---------------------------------------------------------------------------
+# Layout (pixel coords on a 1080x1080 canvas, y up from the bottom) — shared
+# with verify_frames.py.
+# ---------------------------------------------------------------------------
+CANVAS = (1080, 1080)
+LANE_X0, LANE_X1 = 150, 1010          # full lane strip span
+TRACK_X0, TRACK_W = 260, 750          # bar track inside the strip
+BUDGET_X = 1010                       # vertical "5 s budget" line
+LANE_STRIPS = {                       # y-bands per lane (verify targets)
+    "python-naive": (150, 700, 1010, 800),
+    "c-blocked": (150, 570, 1010, 670),
+    "asm-blocked": (150, 440, 1010, 540),
+}
+CAPTION_BAND = (0, 0, 1080, 330)      # bottom caption strip (verify target)
+BUDGET_LINE_BOX = (990, 420, 1080, 880)
+CHIP_W, CHIP_H = 140, 40
+
+LANE_LABELS = {                       # strip top -> label anchor
+    "python-naive": (700, 800),
+    "c-blocked": (570, 670),
+    "asm-blocked": (440, 540),
+}
+TRACKS = {                            # bar fill box inside each strip
+    "python-naive": (260, 720, 1010, 780),
+    "c-blocked": (260, 590, 1010, 650),
+    "asm-blocked": (260, 460, 1010, 520),
+}
+
+HEADLINE = "PYTHON n=256  →  ASM-BLOCKED n=2048"
+TAGLINE = "8× THE MATRIX SIZE · 512× THE MATH"
+KICKER = "SAME 5-SECOND BUDGET · ONE n x n MATMUL · THREE BACKENDS"
+SUB = "pure Python crawls to n=256; AVX2/FMA asm reaches n=2048 — same wall clock."
+PROVENANCE = "best-of-3 · single core · WSL2 Ubuntu · Skylake-class · no BLAS/numpy"
+
+
+def load_lanes(csv_path):
+    """Read benchmark_results.csv; return {lane: [(size, seconds), ...]} sorted."""
+    with open(csv_path, newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    out = {}
+    for name, (backend, variant, *_) in LANES.items():
+        sel = [
+            (int(r["size"]), float(r["seconds"]))
+            for r in rows
+            if r["backend"] == backend and r["variant"] == variant
+        ]
+        sel.sort()
+        out[name] = sel
+    return out
+
+
+def targets(lane_rows):
+    """Largest n fitting the 5 s budget per lane: {lane: (n, seconds)}."""
+    out = {}
+    for name, rows in lane_rows.items():
+        fit = [r for r in rows if r[1] <= BUDGET_SEC]
+        if fit:
+            out[name] = fit[-1]
+    return out
+
+
+def draw_frame(ax, t, lane_rows, tgt, scale_flops):
+    """Draw the full frame for story-time t (0..BUDGET_SEC) on axes `ax`."""
+    ax.clear()
+    ax.set_xlim(0, CANVAS[0])
+    ax.set_ylim(0, CANVAS[1])
+    ax.axis("off")
+
+    ax.add_patch(plt.Rectangle((0, 0), 1080, 1080, color=PALETTE["BG"], zorder=0))
+    ax.add_patch(plt.Rectangle((0, 0), 1080, 330, color=PALETTE["CAPTION_BG"], zorder=1))
+    ax.add_patch(plt.Rectangle((0, 320), 1080, 4, color=PALETTE["ACCENT"], zorder=2))
+
+    ax.text(40, 1015, "ZEROABSTRACTIONNET", fontsize=22, fontweight="bold",
+            color=PALETTE["TEXT"], va="bottom", zorder=3)
+    ax.text(1040, 1022, "matmul backends: python · C-blocked · asm-blocked (AVX2/FMA)",
+            fontsize=16, color=PALETTE["DIM"], ha="right", va="bottom", zorder=3)
+
+    for name, (strip_x0, strip_y0, strip_x1, strip_y1) in LANE_STRIPS.items():
+        _, _, colour, label, variant = LANES[name]
+        ax.add_patch(plt.Rectangle((strip_x0, strip_y0), strip_x1 - strip_x0,
+                                   strip_y1 - strip_y0, facecolor=PALETTE["PANEL"],
+                                   edgecolor=PALETTE["DIM"], linewidth=1.5, zorder=2))
+        ax.text(strip_x0 + 16, (strip_y0 + strip_y1) / 2 + 8, label,
+                fontsize=26, fontweight="bold", color=PALETTE["TEXT"],
+                ha="left", va="center", zorder=4)
+        ax.text(strip_x0 + 16, (strip_y0 + strip_y1) / 2 - 14, variant,
+                fontsize=17, color=PALETTE["DIM"], ha="left", va="center", zorder=4)
+
+    for name, (tx0, ty0, tx1, ty1) in TRACKS.items():
+        ax.add_patch(plt.Rectangle((tx0, ty0), tx1 - tx0, ty1 - ty0,
+                                   color=PALETTE["BG"], zorder=3))
+
+    # Budget line + label.
+    ax.plot([BUDGET_X, BUDGET_X], [420, 880], color=PALETTE["ACCENT"], lw=3, zorder=5)
+    ax.text(BUDGET_X - 6, 865, "5 s budget", fontsize=22, fontweight="bold",
+            color=PALETTE["ACCENT"], ha="right", va="top", zorder=5)
+
+    # Time axis.
+    ax.plot([LANE_X0, LANE_X1], [415, 415], color=PALETTE["DIM"], lw=2, zorder=3)
+    for sec in range(6):
+        x = LANE_X0 + (LANE_X1 - LANE_X0) * sec / BUDGET_SEC
+        ax.plot([x, x], [415, 428], color=PALETTE["DIM"], lw=2, zorder=3)
+        ax.text(x, 388, f"{sec} s", fontsize=18, color=PALETTE["DIM"],
+                ha="center", va="top", zorder=3)
+
+    # Size chips on the shared timeline: where each backend lands inside the budget.
+    for name, (n, secs) in tgt.items():
+        x = LANE_X0 + (LANE_X1 - LANE_X0) * secs / BUDGET_SEC
+        ax.text(min(x, LANE_X1 - 30), 356, f"n={n}", fontsize=18,
+                color=PALETTE["DIM"], ha="center", va="top", zorder=3)
+
+    # Lane fills (flops done vs the asm-blocked target as full scale) + chips.
+    for name, (tx0, ty0, tx1, ty1) in TRACKS.items():
+        n, secs = tgt[name]
+        gflops = 2.0 * n ** 3 / 1e9
+        rate = gflops / secs
+        done = min(rate * t, scale_flops)
+        frac = done / scale_flops
+        _, _, colour, _, _ = LANES[name]
+        w = max((tx1 - tx0) * frac, 2.0)
+        ax.add_patch(plt.Rectangle((tx0, ty0), w, ty1 - ty0, color=colour, zorder=4))
+        if t >= secs:
+            tip = tx0 + (tx1 - tx0) * frac
+            chip_x = min(max(tip - CHIP_W, tx0), tx1 - CHIP_W)
+            chip_y = ty1 + 6
+            ax.add_patch(plt.Rectangle((chip_x, chip_y), CHIP_W, CHIP_H,
+                                       color=colour, zorder=6))
+            ax.text(chip_x + CHIP_W / 2, chip_y + CHIP_H / 2, f"n={n}",
+                    fontsize=26, fontweight="bold", color="#FFFFFF",
+                    ha="center", va="center", zorder=7)
+
+    ax.text(540, 285, KICKER, fontsize=24, fontweight="bold", color=PALETTE["ACCENT"],
+            ha="center", va="center", zorder=4)
+    ax.text(540, 215, HEADLINE, fontsize=54, fontweight="bold", color=PALETTE["TEXT"],
+            ha="center", va="center", zorder=4)
+    ax.text(540, 150, TAGLINE, fontsize=40, fontweight="bold", color=PALETTE["ACCENT"],
+            ha="center", va="center", zorder=4)
+    ax.text(540, 100, SUB, fontsize=22, color=PALETTE["TEXT"],
+            ha="center", va="center", zorder=4)
+    ax.text(540, 52, PROVENANCE, fontsize=16, color=PALETTE["DIM"],
+            ha="center", va="center", zorder=4)
+
+
+def make_figure():
+    fig, ax = plt.subplots(figsize=(10.8, 10.8), dpi=100)
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    return fig, ax
+
+
+def render_movie(lane_rows, tgt, out_path, frames, fps, scale_flops):
+    fig, ax = make_figure()
+    story_per_frame = BUDGET_SEC / frames
+    hold = max(0, frames // 8)
+
+    def update(i):
+        t = min(story_per_frame * i, BUDGET_SEC) if i < frames - hold else BUDGET_SEC
+        draw_frame(ax, t, lane_rows, tgt, scale_flops)
+        return []
+
+    anim = FuncAnimation(fig, update, frames=frames, blit=False)
+    writer = FFMpegWriter(fps=fps)
+    print(f"rendering {frames} frames @ {fps} fps -> {out_path}")
+    anim.save(out_path, writer=writer, dpi=100)
+    plt.close(fig)
+
+
+def render_still(lane_rows, tgt, out_path, t, scale_flops):
+    fig, ax = make_figure()
+    draw_frame(ax, min(t, BUDGET_SEC), lane_rows, tgt, scale_flops)
+    fig.savefig(out_path, dpi=100)
+    plt.close(fig)
+    print(f"still at story-time {min(t, BUDGET_SEC)}s -> {out_path}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default=os.path.join("present", "budget_reel.mp4"))
+    parser.add_argument("--csv", default="benchmark_results.csv")
+    parser.add_argument("--frames", type=int, default=136, help="total frames (16 hold at the end)")
+    parser.add_argument("--fps", type=int, default=8)
+    parser.add_argument("--still", type=float, default=None,
+                        help="instead of the movie, dump a PNG at this story-time (s)")
+    args = parser.parse_args()
+
+    lane_rows = load_lanes(args.csv)
+    tgt = targets(lane_rows)
+    asm_n, asm_t = tgt["asm-blocked"]
+    scale_flops = 2.0 * asm_n ** 3 / 1e9
+    print("lanes (largest n within 5 s):",
+          {k: (v[0], round(v[1], 2)) for k, v in tgt.items()})
+
+    if args.still is not None:
+        out = os.path.join("present", f"budget_still_t{args.still}.png")
+        render_still(lane_rows, tgt, out, args.still, scale_flops)
+    else:
+        render_movie(lane_rows, tgt, args.out, args.frames, args.fps, scale_flops)
+
+
+if __name__ == "__main__":
+    main()

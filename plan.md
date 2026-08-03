@@ -40,7 +40,9 @@ differentiator; 3-5 are mechanics bundled with whichever lands first.
 ## Numbers to bake into captions (already in `RESULTS.md` — keep exact)
 
 - Same ~5s wall-clock budget: python fits **n=256** (2.64 s) → asm-blocked
-  fits **n=2048** (4.96 s) = **8× the matrix, 64× the math, same budget**.
+  fits **n=2048** (4.96 s) = **8× the matrix size** (RESULTS.md/README
+  wording — the honest math is 8× the dimension, hence 512× the flops:
+  caption line "8× THE MATRIX SIZE · 512× THE MATH", not "64×").
 - Speedup vs python-naive at n=512: c-naive **20×**, c-blocked **46×**,
   asm-blocked **~237×**.
 - asm-blocked vs c-blocked at n=1024: **4.5×** (the float32 same-again win).
@@ -81,9 +83,12 @@ the worst possible README embed.
 
 ## Definition of done
 
-- [ ] `present/animate_budget.py` → `present/budget_reel.mp4` and
+- [x] `present/animate_budget.py` → `present/budget_reel.mp4` and
       `present/animate_stack.py` → `present/stack_drilldown.mp4` committed,
       rendered, pixel-verified via `present/verify_frames.py`.
+      (reel done 2026-08-04: 17 s, 1080×1080, 8 fps, 91 KB; verified by
+      `python present/verify_frames.py` — canvas, caption band, 3 lanes
+      fill+motion+ratio, budget line, headline text.)
 - [ ] (Stretch) `present/recut_comparison.py` re-encodes the existing
       `backend_comparison.mp4` with endpoint "×237" annotation + 1 s hold;
       `compare_backends.py` untouched.
