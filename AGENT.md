@@ -9,19 +9,24 @@ the speedup at each stage. A synchronized animation of training (network
 diagram + decision boundary + loss curve) is a first-class deliverable, not
 an afterthought.
 
-The full technical spec lives in three files at the repo root — **read the
+The full technical spec lives in three files under `docs/` — **read the
 relevant one in full before writing any code for that phase**:
-- `01_python_phase.md`
-- `02_c_phase.md`
-- `03_asm_phase.md`
+- `docs/01_python_phase.md`
+- `docs/02_c_phase.md`
+- `docs/03_asm_phase.md`
 
 These three files are the source of truth for interfaces, schemas, and
 function signatures. If anything below conflicts with them, the phase docs
 win — this file governs *process and conventions*, not the technical spec.
 
+After phases 1-3 closed, `plan.md` is the active plan for the online
+presentation deliverables (`present/` scripts, README re-landing, committed
+media). The phase docs stay the technical source of truth; `plan.md` governs
+what the presentation phase builds and how it is verified.
+
 ## Hard rules — do not violate these even if it seems more convenient
 1. **Phases are sequential and gated.** Do not start phase 2 work until
-   phase 1's "Definition of done" checklist (in `01_python_phase.md`) is
+   phase 1's "Definition of done" checklist (in `docs/01_python_phase.md`) is
    fully satisfied and confirmed with the user. Same for phase 2 → 3. If
    asked to "just get ahead" on a later phase, push back and confirm that's
    really intended before doing it.
@@ -56,6 +61,17 @@ win — this file governs *process and conventions*, not the technical spec.
    of done" checklist — treat it literally as a checklist. Run the actual
    tests/benchmarks and show the output; don't assert something passes
    without having run it in this session.
+8. **Presentation scripts are read-only consumers.** Everything under
+   `present/` may read the committed benchmark CSVs
+   (`benchmark_results.csv`, `benchmark_shaped.csv`), local `logs/`
+   (gitignored), and the committed sources (`native/c/matmul.c`,
+   `native/asm/matmul.asm`), but must never modify `network.py`,
+   `train.py`, `animate.py`, `ops/*`, `config.py`, `compare_backends.py`,
+   the dataset generator, or the native sources. matplotlib/ffmpeg are
+   fine in `present/` (rendering/verification only); they never enter the
+   training/inference compute path. If a presentation deliverable seems to
+   require editing one of the frozen files, stop and ask — build it as a
+   new script instead.
 
 ## Two-tier run strategy — ALWAYS consider both tiers before planning anything
 
@@ -81,7 +97,9 @@ showcase scale"; showcase runs are explicit CLI flags only. At showcase
 scale `animate.py` thins the network diagram to the top ~300 weights per
 layer. Efficiency claims must always cite showcase-tier numbers (via
 `compare_backends.py`, `benchmark_report.md`, `benchmark_results.csv`,
-`benchmark_shaped.csv`), never demo-tier timings.
+`benchmark_shaped.csv` — the two CSVs are committed repo data since the
+presentation phase, so the numbers are rerunnable from a fresh clone),
+never demo-tier timings.
 
 ## Environment assumptions
 - Linux or WSL2 (the phase-2/3 toolchain — `gcc`, `nasm`, `make`, ELF
@@ -91,6 +109,9 @@ layer. Efficiency claims must always cite showcase-tier numbers (via
 - Toolchain needed: `python3` (3.10+), `gcc`, `nasm`, `make`, `matplotlib`,
   and `ffmpeg` (for mp4 animation export — `animate.py` should degrade to
   gif if ffmpeg isn't found, per the phase-1 doc, rather than crash).
+  Presentation scripts (`present/`) additionally pipe frames through
+  ffmpeg's rawvideo decoder for pixel verification; run them in the same
+  WSL2 environment the benchmarks ran in.
 - No cloud/notebook dependency for this project by design — everything
   should run from a local terminal. If something can't run locally, that's
   a problem to flag, not to route around by suggesting Colab.
@@ -142,6 +163,12 @@ layer. Efficiency claims must always cite showcase-tier numbers (via
   animation heatmap.  Never used for training.
 
 ## What "done" looks like for the whole project
-`RESULTS.md` (specified at the end of `03_asm_phase.md`) exists and is
+`RESULTS.md` (specified at the end of `docs/03_asm_phase.md`) exists and is
 accurate, all three `Definition of done` checklists are checked off, and
 `animate.py` produces working animations for at least one run per backend.
+
+For the presentation phase (active now, governed by `plan.md`), "done" is
+`plan.md`'s Definition of done: `present/animate_budget.py` +
+`present/animate_stack.py` (and the stretch `present/recut_comparison.py`)
+rendered and pixel-verified, `README.md` embedding them plus the banner,
+benchmark CSVs committed, working tree clean.

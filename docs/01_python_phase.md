@@ -32,7 +32,7 @@ interfaces defined here being stable.
 
 ## Directory structure (create this now; later phases add files, not rename)
 ```
-cpu-native-ann/
+ZeroAbstractionNet/                  # repo root (the name in plan/README; not "cpu-native-ann")
 ├── config.py                  # all hyperparams, seeds, dataset params in one place
 ├── data/
 │   └── generate_data.py       # deterministic XOR-quadrant dataset generator
@@ -113,8 +113,10 @@ training). Default `resolution=40` (1600 points — cheap to run forward-pass
 inference on every log step).
 
 ## Network spec
-- Architecture: configurable list of layer sizes, default `[2, 4, 1]`
-  (2 inputs, 1 hidden layer of 4 neurons, 1 output).
+- Architecture: configurable list of layer sizes, default `[2, 4, 4, 1]`
+  (2 inputs, 2 hidden layers of 4 neurons, 1 output). Defaults live in
+  `config.py` (`LAYER_SIZES`, `LR`, `SEED`, `N_PER_QUADRANT`) and are the
+  single source of truth; this doc mirrors them.
 - Hidden activation: `tanh`. Output activation: `sigmoid`. Loss: binary
   cross-entropy.
 - Weight init: for each layer, sample uniform in
@@ -240,10 +242,11 @@ static info.
 ```json
 {
   "backend": "python",
-  "layer_sizes": [2, 4, 1],
-  "lr": 0.5,
+  "layer_sizes": [2, 4, 4, 1],
+  "lr": 2.5,
   "seed": 0,
   "n_per_quadrant": 25,
+  "epochs": 250,
   "dataset_points": [[0.12, 0.87], ...],
   "dataset_labels": [1.0, 0.0, ...],
   "probe_grid": [[-1.0, -1.0], ...],
@@ -267,6 +270,14 @@ Note: `probe_predictions` is the network's output for every point in the
 fixed `probe_grid` from `meta.json` — this is what becomes the animated
 decision-boundary heatmap. `weights`/`biases` are the full parameter
 snapshot — this drives the animated network diagram.
+
+Extensions are additive only, and only by the designated producers:
+`compare_backends.py` appends per-epoch `t_forward`/`t_backward`/`t_update`
+to each `epochs.jsonl` line and `epochs`/`final_loss`/`golden_ok`/
+`total_sec`/`epoch_ms`/`fwd_pct`/`bwd_pct`/`upd_pct` to `meta.json` for its
+showcase runs. `train.py`/`analyze_run.py` never write those extra fields.
+The fields above are the stable core `animate.py` consumes, and the
+`layer_sizes` + `seed` pair is what tests use to rebuild the Network.
 
 ## Benchmark script — `benchmark_matmul.py`
 Separate from the tiny demo network. This answers "how big a matmul can my

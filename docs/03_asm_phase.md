@@ -4,7 +4,7 @@
 Phases 1 and 2 are complete and their Definition of Done checklists are
 satisfied. `benchmark_report.md` already has Python and C rows. This
 phase adds an `asm` backend following the exact same `ops` interface
-pattern as phase 2's `backend_c.py` — read `02_c_phase.md` first if you
+pattern as phase 2's `backend_c.py` — read `docs/02_c_phase.md` first if you
 haven't, the ctypes marshalling approach here is the same.
 
 ## Target ISA — be explicit about this, don't over-reach

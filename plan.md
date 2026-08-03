@@ -13,9 +13,16 @@ two natural failure modes of a "language speed comparison" post:
   committed media; LinkedIn rewards <30s **square/portrait** mp4 with
   caption text burned into frames, not 16:9 landscape.
 
-Everything reuses committed CSVs/logs (`benchmark_results.csv`,
-`benchmark_shaped.csv`, `logs/showcase_*`) — **no new benchmark runs**
+Everything reuses committed data (`benchmark_results.csv`,
+`benchmark_shaped.csv` — tracked with the repo so the media is rerunnable
+from a fresh clone) plus local `logs/showcase_*` (gitignored; only
+`compare_backends.py --regenerate` needs them) — **no new benchmark runs**
 needed to produce the media.
+
+Hard constraint for this phase: nothing in frozen phases 1-3 changes —
+`present/` scripts are read-only consumers of the CSVs, logs, and committed
+sources (AGENT.md rule 8). The only editable files are `README.md` (item 3)
+and this tracker.
 
 ## Venue-mapped deliverables
 
@@ -23,8 +30,8 @@ needed to produce the media.
 |---|---|---|---|---|---|
 | 1 | **"Same 5 seconds" budget reel** — progress bar trickles for python, reaches n=2048 for asm | `present/animate_budget.py` | `benchmark_results.csv`, `benchmark_shaped.csv` | 1080×1080 mp4, ≤20s, caption burned in | LinkedIn primary + README embed |
 | 2 | **Stack drill-down** — same 8×8 matmul in Python → ctypes → `matmul.c` → `matmul.asm` (register-lane highlight) | `present/animate_stack.py` | static panels + code text; no new benchmarks | 16:9 mp4 ~25s | README primary (the "from scratch" proof), second LinkedIn clip |
-| 3 | **README re-landing** — banner PNG + embeds (1)+(2), speedup tables up, plus a **"Measurement card"** (CPU/SKL-class, WSL2, single-core, best-of-3, AVX2/FMA flags) as a trust strip | `README.md` edit | existing tables + media | rendered README | GitHub |
-| 4 | **Comparison recut (stretch)** — existing `backend_comparison.mp4` + endpoint "×237" annotations + 1s hold on final frame | `compare_backends.py` | existing CSVs | 16:9 mp4 | README below drill-down |
+| 3 | **README re-landing** — banner PNG + embeds (1)+(2), speedup tables up, plus a **"Measurement card"** (CPU/SKL-class, WSL2, single-core, best-of-3, AVX2/FMA flags) as a trust strip | `README.md` edit | existing tables + media; banner → `present/banner.png` | rendered README | GitHub |
+| 4 | **Comparison recut (stretch)** — existing `backend_comparison.mp4` + endpoint "×237" annotations + 1s hold on final frame | `present/recut_comparison.py` (new script; `compare_backends.py` stays untouched per AGENT.md rule 8) | existing `animations/backend_comparison.mp4` + CSVs | 16:9 mp4 | README below drill-down |
 | 5 | **Gitignore carve-out** | DONE by user — `animations/*mp4/png/gif` no longer ignored; media commits with the repo | – | – | – |
 
 **Priority: build 1 then 2** — 1 is the LinkedIn hook, 2 is the README
@@ -58,22 +65,37 @@ differentiator; 3-5 are mechanics bundled with whichever lands first.
   (blocked FMA kernel, 8 lanes). Annotate by *loading the real committed
   source* of `native/asm/matmul.asm` and highlighting the executing lines —
   the animation literally walks the repo (that is the "no libraries" proof).
-- 16:9 primary (~30 s) + optional 1080×1080 crop.
+- 16:9 primary (~30 s) → `present/stack_drilldown.mp4`; optional 1080×1080
+  crop → `present/stack_drilldown_square.mp4`.
 
 ## Verification rule (I can't see frames — so nothing ships unverified)
 
 Any new mp4/png is validated by **pixel scan**: encode a frame to raw RGB
-and assert the expected palette colours actually span the expected regions
-(the same trick used to fix `backend_comparison.png`). An animation that
-silently shows an empty figure is the worst possible README embed.
+(via `ffmpeg` rawvideo decode) and assert the expected palette colours
+actually span the expected regions. The helper is written fresh as
+`present/verify_frames.py`, shared by both new scripts — note there is NO
+existing pixel-scan code in the repo to reuse (the historical
+`backend_comparison.png` fix in commit 3f0a624 was a dedicated-figure
+rewrite, not a scan). An animation that silently shows an empty figure is
+the worst possible README embed.
 
 ## Definition of done
 
-- [ ] `present/animate_budget.py` + `present/animate_stack.py` committed,
-      rendered, pixel-verified.
-- [ ] `README.md` embeds banner PNG + drill-down + budget reel (mp4 HTML
-      blocks), links `RESULTS.md`; speedup table kept above the fold.
+- [ ] `present/animate_budget.py` → `present/budget_reel.mp4` and
+      `present/animate_stack.py` → `present/stack_drilldown.mp4` committed,
+      rendered, pixel-verified via `present/verify_frames.py`.
+- [ ] (Stretch) `present/recut_comparison.py` re-encodes the existing
+      `backend_comparison.mp4` with endpoint "×237" annotation + 1 s hold;
+      `compare_backends.py` untouched.
+- [ ] `README.md` embeds banner (`present/banner.png`) + drill-down +
+      budget reel (mp4 HTML blocks), links `RESULTS.md`; speedup table kept
+      above the fold.
 - [ ] "Measurement card" (CPU/SKL-class, WSL2, single-core, best-of-3,
-      `gcc -O2 -mavx2 -mfma`, NASM) present wherever speedups are quoted.
-- [ ] `animations/*` media committed (gitignore carve-out already done);
-      working tree clean; `plan.md` tracking updated.
+      `gcc -O2 -mavx2 -mfma`, NASM) present wherever speedups are quoted in
+      hand-written docs (canonical copy in `README.md`; `benchmark_report.md`
+      is generator output and deliberately keeps no card — see AGENT.md
+      rule 8).
+- [ ] `animations/*` + `present/*` media committed (gitignore carve-out
+      already done); benchmark CSVs (`benchmark_results.csv`,
+      `benchmark_shaped.csv`) committed with the repo; working tree clean;
+      `plan.md` tracking updated.

@@ -1,7 +1,7 @@
 # Phase 2 — C Matmul Backend
 
 ## Prerequisite
-Phase 1 (`01_python_phase.md`) is complete: `train.py --backend python`
+Phase 1 (`docs/01_python_phase.md`) is complete: `train.py --backend python`
 works, `benchmark_matmul.py` and `profile_run.py` have produced baseline
 numbers, `profile_baseline.txt` confirms matmul dominates runtime. This
 phase does **not** touch `network.py`, `train.py`, `animate.py`, the
