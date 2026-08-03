@@ -136,8 +136,17 @@ def _check_budget(mp4_path):
 
     text = count_in_region(end[2], w, h, *CAPTION_BAND, PALETTE["TEXT"])
     assert text >= 500, f"headline text missing from caption band ({text} px)"
+
+    # Caption text must not bleed off the left/right canvas edges
+    # (y stops at 295 to exclude the intentional full-width accent rule at 300).
+    for edge in ((0, 0, 40, 295), (1040, 0, 1080, 295)):
+        bleed_text = count_in_region(end[2], w, h, *edge, PALETTE["TEXT"])
+        bleed_accent = count_in_region(end[2], w, h, *edge, PALETTE["ACCENT"])
+        assert bleed_text < 500, f"caption text bleeds off edge {edge} ({bleed_text} px)"
+        assert bleed_accent < 500, f"caption accent bleeds off edge {edge} ({bleed_accent} px)"
+
     print("budget spec OK: canvas, caption band, 3 lanes (fill + motion + ratio), "
-          "budget line, headline text")
+          "budget line, headline text, no caption edge-bleed")
     print(f"lane pixel counts at end: "
           f"python-naive={counts_end['python-naive']} c-blocked={counts_end['c-blocked']} "
           f"asm-blocked={counts_end['asm-blocked']}")

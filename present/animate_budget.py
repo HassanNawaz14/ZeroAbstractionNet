@@ -18,7 +18,6 @@ Usage:
 import argparse
 import csv
 import os
-import sys
 
 import matplotlib
 
@@ -62,26 +61,52 @@ LANE_STRIPS = {                       # y-bands per lane (verify targets)
     "c-blocked": (150, 570, 1010, 670),
     "asm-blocked": (150, 440, 1010, 540),
 }
-CAPTION_BAND = (0, 0, 1080, 330)      # bottom caption strip (verify target)
-BUDGET_LINE_BOX = (990, 420, 1080, 880)
-CHIP_W, CHIP_H = 140, 40
+CAPTION_BAND = (0, 0, 1080, 300)      # bottom caption strip (verify target)
+BUDGET_LINE_BOX = (990, 360, 1080, 1050)
+CHIP_W, CHIP_H = 140, 46
 
-LANE_LABELS = {                       # strip top -> label anchor
-    "python-naive": (700, 800),
-    "c-blocked": (570, 670),
-    "asm-blocked": (440, 540),
-}
 TRACKS = {                            # bar fill box inside each strip
     "python-naive": (260, 720, 1010, 780),
     "c-blocked": (260, 590, 1010, 650),
     "asm-blocked": (260, 460, 1010, 520),
 }
 
+# Caption text — every line is fitted to the canvas width (see _fit_fontsize),
+# so nothing can bleed off the left/right edges.
+CHART_TITLE = "WHAT FITS IN 5 SECONDS?"
+CHART_SUB = "one n×n matmul per lane · best-of-3 · single core"
+CHART_LEGEND = "bar = 2·n³ flops completed · chip lands when that matmul finishes"
+TOP_RIGHT = "python · C-blocked · asm-blocked (AVX2/FMA)"
+
+KICKER = "SAME WALL-CLOCK BUDGET — ONE MATMUL, THREE BACKENDS"
 HEADLINE = "PYTHON n=256  →  ASM-BLOCKED n=2048"
 TAGLINE = "8× THE MATRIX SIZE · 512× THE MATH"
-KICKER = "SAME 5-SECOND BUDGET · ONE n x n MATMUL · THREE BACKENDS"
-SUB = "pure Python crawls to n=256; AVX2/FMA asm reaches n=2048 — same wall clock."
+SUB = "the clock ticks once for everyone — python crawls to n=256, AVX2/FMA asm lands n=2048."
 PROVENANCE = "best-of-3 · single core · WSL2 Ubuntu · Skylake-class · no BLAS/numpy"
+
+# ---------------------------------------------------------------------------
+# text fitting: shrink fontsize until the rendered width fits the target
+# ---------------------------------------------------------------------------
+_FIT_CACHE = {}
+
+
+def _fit_fontsize(ax, text, start, target_w, weight="normal"):
+    """Return the largest fontsize (<= start) whose width fits target_w px."""
+    key = (text, target_w, weight)
+    if key in _FIT_CACHE:
+        return _FIT_CACHE[key]
+    renderer = ax.figure.canvas.get_renderer()
+    fs = start
+    while fs >= 8:
+        probe = ax.text(0, 0, text, fontsize=fs, fontweight=weight)
+        width = probe.get_window_extent(renderer=renderer).width
+        probe.remove()
+        if width <= target_w:
+            _FIT_CACHE[key] = fs
+            return fs
+        fs -= 1
+    _FIT_CACHE[key] = 8
+    return 8
 
 
 def load_lanes(csv_path):
@@ -118,14 +143,26 @@ def draw_frame(ax, t, lane_rows, tgt, scale_flops):
     ax.axis("off")
 
     ax.add_patch(plt.Rectangle((0, 0), 1080, 1080, color=PALETTE["BG"], zorder=0))
-    ax.add_patch(plt.Rectangle((0, 0), 1080, 330, color=PALETTE["CAPTION_BG"], zorder=1))
-    ax.add_patch(plt.Rectangle((0, 320), 1080, 4, color=PALETTE["ACCENT"], zorder=2))
+    ax.add_patch(plt.Rectangle((0, 0), 1080, 300, color=PALETTE["CAPTION_BG"], zorder=1))
+    ax.add_patch(plt.Rectangle((0, 300), 1080, 4, color=PALETTE["ACCENT"], zorder=2))
 
-    ax.text(40, 1015, "ZEROABSTRACTIONNET", fontsize=22, fontweight="bold",
+    # --- chart header -------------------------------------------------------
+    ax.text(40, 1048, "ZEROABSTRACTIONNET", fontsize=20, fontweight="bold",
             color=PALETTE["TEXT"], va="bottom", zorder=3)
-    ax.text(1040, 1022, "matmul backends: python · C-blocked · asm-blocked (AVX2/FMA)",
-            fontsize=16, color=PALETTE["DIM"], ha="right", va="bottom", zorder=3)
+    ax.text(1040, 1048, TOP_RIGHT,
+            fontsize=_fit_fontsize(ax, TOP_RIGHT, 16, 620),
+            color=PALETTE["DIM"], ha="right", va="bottom", zorder=3)
+    ax.text(540, 1002, CHART_TITLE,
+            fontsize=_fit_fontsize(ax, CHART_TITLE, 32, 1000, "bold"),
+            fontweight="bold", color=PALETTE["TEXT"], ha="center", va="center", zorder=3)
+    ax.text(540, 966, CHART_SUB,
+            fontsize=_fit_fontsize(ax, CHART_SUB, 18, 1000),
+            color=PALETTE["DIM"], ha="center", va="center", zorder=3)
+    ax.text(540, 928, CHART_LEGEND,
+            fontsize=_fit_fontsize(ax, CHART_LEGEND, 17, 1000),
+            color=PALETTE["DIM"], ha="center", va="center", zorder=3)
 
+    # --- lanes --------------------------------------------------------------
     for name, (strip_x0, strip_y0, strip_x1, strip_y1) in LANE_STRIPS.items():
         _, _, colour, label, variant = LANES[name]
         ax.add_patch(plt.Rectangle((strip_x0, strip_y0), strip_x1 - strip_x0,
@@ -141,26 +178,26 @@ def draw_frame(ax, t, lane_rows, tgt, scale_flops):
         ax.add_patch(plt.Rectangle((tx0, ty0), tx1 - tx0, ty1 - ty0,
                                    color=PALETTE["BG"], zorder=3))
 
-    # Budget line + label.
-    ax.plot([BUDGET_X, BUDGET_X], [420, 880], color=PALETTE["ACCENT"], lw=3, zorder=5)
-    ax.text(BUDGET_X - 6, 865, "5 s budget", fontsize=22, fontweight="bold",
+    # --- budget line + label ------------------------------------------------
+    ax.plot([BUDGET_X, BUDGET_X], [378, 1040], color=PALETTE["ACCENT"], lw=3, zorder=5)
+    ax.text(BUDGET_X - 6, 990, "5 s budget", fontsize=22, fontweight="bold",
             color=PALETTE["ACCENT"], ha="right", va="top", zorder=5)
 
-    # Time axis.
-    ax.plot([LANE_X0, LANE_X1], [415, 415], color=PALETTE["DIM"], lw=2, zorder=3)
+    # --- time axis ----------------------------------------------------------
+    ax.plot([LANE_X0, LANE_X1], [378, 378], color=PALETTE["DIM"], lw=2, zorder=3)
     for sec in range(6):
         x = LANE_X0 + (LANE_X1 - LANE_X0) * sec / BUDGET_SEC
-        ax.plot([x, x], [415, 428], color=PALETTE["DIM"], lw=2, zorder=3)
-        ax.text(x, 388, f"{sec} s", fontsize=18, color=PALETTE["DIM"],
+        ax.plot([x, x], [378, 391], color=PALETTE["DIM"], lw=2, zorder=3)
+        ax.text(x, 350, f"{sec} s", fontsize=18, color=PALETTE["DIM"],
                 ha="center", va="top", zorder=3)
 
-    # Size chips on the shared timeline: where each backend lands inside the budget.
+    # --- size chips on the shared timeline: where each backend lands --------
     for name, (n, secs) in tgt.items():
         x = LANE_X0 + (LANE_X1 - LANE_X0) * secs / BUDGET_SEC
-        ax.text(min(x, LANE_X1 - 30), 356, f"n={n}", fontsize=18,
+        ax.text(min(x, LANE_X1 - 30), 318, f"n={n}", fontsize=18,
                 color=PALETTE["DIM"], ha="center", va="top", zorder=3)
 
-    # Lane fills (flops done vs the asm-blocked target as full scale) + chips.
+    # --- lane fills (flops done vs the asm-blocked target) + landing chips --
     for name, (tx0, ty0, tx1, ty1) in TRACKS.items():
         n, secs = tgt[name]
         gflops = 2.0 * n ** 3 / 1e9
@@ -176,20 +213,32 @@ def draw_frame(ax, t, lane_rows, tgt, scale_flops):
             chip_y = ty1 + 6
             ax.add_patch(plt.Rectangle((chip_x, chip_y), CHIP_W, CHIP_H,
                                        color=colour, zorder=6))
-            ax.text(chip_x + CHIP_W / 2, chip_y + CHIP_H / 2, f"n={n}",
-                    fontsize=26, fontweight="bold", color="#FFFFFF",
+            ax.text(chip_x + CHIP_W / 2, chip_y + CHIP_H - 12, f"n={n}",
+                    fontsize=20, fontweight="bold", color="#FFFFFF",
+                    ha="center", va="center", zorder=7)
+            ax.text(chip_x + CHIP_W / 2, chip_y + 10, f"{secs:.2f} s",
+                    fontsize=13, color="#FFFFFF", alpha=0.92,
                     ha="center", va="center", zorder=7)
 
-    ax.text(540, 285, KICKER, fontsize=24, fontweight="bold", color=PALETTE["ACCENT"],
+    # --- caption band -------------------------------------------------------
+    ax.text(540, 265, KICKER,
+            fontsize=_fit_fontsize(ax, KICKER, 19, 950, "bold"),
+            fontweight="bold", color=PALETTE["ACCENT"],
             ha="center", va="center", zorder=4)
-    ax.text(540, 215, HEADLINE, fontsize=54, fontweight="bold", color=PALETTE["TEXT"],
+    ax.text(540, 212, HEADLINE,
+            fontsize=_fit_fontsize(ax, HEADLINE, 44, 950, "bold"),
+            fontweight="bold", color=PALETTE["TEXT"],
             ha="center", va="center", zorder=4)
-    ax.text(540, 150, TAGLINE, fontsize=40, fontweight="bold", color=PALETTE["ACCENT"],
+    ax.text(540, 158, TAGLINE,
+            fontsize=_fit_fontsize(ax, TAGLINE, 32, 950, "bold"),
+            fontweight="bold", color=PALETTE["ACCENT"],
             ha="center", va="center", zorder=4)
-    ax.text(540, 100, SUB, fontsize=22, color=PALETTE["TEXT"],
-            ha="center", va="center", zorder=4)
-    ax.text(540, 52, PROVENANCE, fontsize=16, color=PALETTE["DIM"],
-            ha="center", va="center", zorder=4)
+    ax.text(540, 100, SUB,
+            fontsize=_fit_fontsize(ax, SUB, 18, 950),
+            color=PALETTE["TEXT"], ha="center", va="center", zorder=4)
+    ax.text(540, 46, PROVENANCE,
+            fontsize=_fit_fontsize(ax, PROVENANCE, 15, 950),
+            color=PALETTE["DIM"], ha="center", va="center", zorder=4)
 
 
 def make_figure():
