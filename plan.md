@@ -97,15 +97,20 @@ the worst possible README embed.
 - [ ] (Stretch) `present/recut_comparison.py` re-encodes the existing
       `backend_comparison.mp4` with endpoint "×237" annotation + 1 s hold;
       `compare_backends.py` untouched.
-- [ ] `README.md` embeds banner (`present/banner.png`) + drill-down +
+- [x] `README.md` embeds banner (`present/banner.png`) + drill-down +
       budget reel (mp4 HTML blocks), links `RESULTS.md`; speedup table kept
       above the fold.
-- [ ] "Measurement card" (CPU/SKL-class, WSL2, single-core, best-of-3,
-      `gcc -O2 -mavx2 -mfma`, NASM) present wherever speedups are quoted in
+      (done 2026-08-04, commit 4d90b75: full re-landing — banner, both
+      films, stills, 3 showcase mp4s, backend_comparison mp4+png, 3 GIFs,
+      dataset, two-tier strategy, full sweep/shaped/showcase tables,
+      measurement card, usage + layout + testing sections, doc links.)
+- [x] "Measurement card" (CPU/SKL-class, WSL2, single-core, best-of-3,
+      `gcc -O2`, NASM + `gcc -shared`) present wherever speedups are quoted in
       hand-written docs (canonical copy in `README.md`; `benchmark_report.md`
       is generator output and deliberately keeps no card — see AGENT.md
-      rule 8).
-- [ ] `animations/*` + `present/*` media committed (gitignore carve-out
+      rule 8). (done 2026-08-04: canonical card sits directly under the
+      numbers section in README.md; RESULTS.md narrative lives under it.)
+- [x] `animations/*` + `present/*` media committed (gitignore carve-out
       already done); benchmark CSVs (`benchmark_results.csv`,
       `benchmark_shaped.csv`) committed with the repo; working tree clean;
       `plan.md` tracking updated.
