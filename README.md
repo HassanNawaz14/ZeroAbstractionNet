@@ -5,6 +5,22 @@ dataset, with matrix-multiplication backend progressively replaced from
 pure Python → C → hand-written x86-64 AVX2/FMA assembly to empirically
 measure each stage's speedup.
 
+![Matmul backends — log-log sweep and shaped networks](animations/backend_comparison.png)
+
+<details>
+<summary><b>tl;dr — the money lines</b></summary>
+
+| | n=512 vs python | largest n in ~5 s |
+|---|---|---|
+| python | 1× | 256 |
+| C blocked | 46× | 1024 |
+| asm blocked (float32, handwritten) | ~237× | 2048 |
+
+Same wall-clock budget, 8× the matrix size — with zero third-party
+compute libraries. The whole library stack (matmul, activations, BCELoss,
+backprop, the C brass, the NASM kernel) is in this repo.
+</details>
+
 ## Dataset — XOR quadrants
 
 The dataset is a synthetic 2D binary classification problem with 4 golden
@@ -73,6 +89,29 @@ The cross-backend comparison machinery — `compare_backends.py`
 (per-backend showcase runs, comparison table, animated log-scale plot
 built from `benchmark_results.csv` + `benchmark_shaped.csv`) — and
 `benchmark_report.md` are the efficiency deliverables of the whole project.
+
+## See it rendered
+
+Training animation for each backend (same showcase net, 250 epochs):
+
+<video src="animations/showcase_python.mp4" controls width="440" muted loop></video>
+<video src="animations/showcase_c.mp4" controls width="440" muted loop></video>
+<video src="animations/showcase_asm.mp4" controls width="440" muted loop></video>
+
+Cross-backend matmul comparison (the 6-variant log-log sweep, animated
+staging then full final state):
+
+<video src="animations/backend_comparison.mp4" controls width="600" muted loop></video>
+
+Details in [RESULTS.md](RESULTS.md) — full sweep/shaped tables,
+per-phase fixed-budget capacity, and the honest per-epoch numbers.
+
+**Measurement card** (numbers above only hold in context): Intel
+Skylake-class, single core, WSL2 Ubuntu 24.04; `gcc -O2` for the C
+backends, NASM + `gcc -shared` for the assembly; best-of-3 timings; asm
+uses float32 (AVX2/FMA, the intended phase-3 precision downgrade). No `-march`,
+no `-ffast-math`, no BLAS/numpy compute — rerun everything with
+`benchmark_matmul.py --sweep` and `compare_backends.py`.
 
 ## Phase docs
 

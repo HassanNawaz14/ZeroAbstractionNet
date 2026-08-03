@@ -16,10 +16,6 @@ logs/*
 *.dylib
 *.lib
 
-# Animation output
-animations/*.mp4
-animations/*.gif
-animations/*.png
 
 # Benchmark output
 benchmark_results.csv
