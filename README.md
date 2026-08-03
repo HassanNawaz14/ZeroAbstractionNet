@@ -95,9 +95,9 @@ ctypes marshalling, the C kernel, and the hand-written assembly — with the
 **exact committed source lines** highlighted as they run.
 
 <p align="center">
-<video src="present/stack_drilldown.mp4" controls width="640" muted loop></video>
+<img src="present/stack_drilldown.gif" width="640" alt="the stack drill-down film">
 </p>
-<p align="center"><sub>30 s · 1920×1080 · 24 fps · the line-by-line walk is drawn from the real files in <code>ops/</code> and <code>native/</code></sub></p>
+<p align="center"><sub>30 s · the line-by-line walk is drawn from the real files in <code>ops/</code> and <code>native/</code> · <a href="present/stack_drilldown.mp4">full-res mp4 (1920×1080)</a></sub></p>
 
 | the storyboard | |
 |---|---|
@@ -115,9 +115,9 @@ silently rot.
 Same wall clock, three backends, three very different matrix sizes.
 
 <p align="center">
-<video src="present/budget_reel.mp4" controls width="360" muted loop></video>
+<img src="present/budget_reel.gif" width="360" alt="the 5-second budget reel film">
 </p>
-<p align="center"><sub>17 s · 1080×1080 · 8 fps · each chip lands when its n×n matmul actually finishes</sub></p>
+<p align="center"><sub>17 s · each chip lands when its n×n matmul actually finishes · <a href="present/budget_reel.mp4">full-res mp4 (1080×1080)</a></sub></p>
 
 ```
   ~5 s budget · one n×n matmul · best-of-3:
@@ -138,19 +138,19 @@ backend — network diagram, decision boundary, loss curve, per-epoch phase
 times.
 
 <p align="center">
-<video src="animations/showcase_python.mp4" controls width="420" muted loop></video>
+<img src="animations/showcase_python.gif" width="420" alt="showcase run, pure Python backend">
 </p>
-<p align="center"><sub>pure Python — 81.0 ms/epoch · 1.0×</sub></p>
+<p align="center"><sub>pure Python — 81.0 ms/epoch · 1.0× · <a href="animations/showcase_python.mp4">full-res mp4</a></sub></p>
 
 <p align="center">
-<video src="animations/showcase_c.mp4" controls width="420" muted loop></video>
+<img src="animations/showcase_c.gif" width="420" alt="showcase run, C backend">
 </p>
-<p align="center"><sub>C (blocked, ctypes) — 20.9 ms/epoch · 3.9×</sub></p>
+<p align="center"><sub>C (blocked, ctypes) — 20.9 ms/epoch · 3.9× · <a href="animations/showcase_c.mp4">full-res mp4</a></sub></p>
 
 <p align="center">
-<video src="animations/showcase_asm.mp4" controls width="420" muted loop></video>
+<img src="animations/showcase_asm.gif" width="420" alt="showcase run, assembly backend">
 </p>
-<p align="center"><sub>x86-64 asm (AVX2/FMA, float32) — 19.5 ms/epoch · 4.1×</sub></p>
+<p align="center"><sub>x86-64 asm (AVX2/FMA, float32) — 19.5 ms/epoch · 4.1× · <a href="animations/showcase_asm.mp4">full-res mp4</a></sub></p>
 
 ### 4 · The cross-backend sweep
 
@@ -159,9 +159,9 @@ asm-vectorized, asm-blocked — staged into the log-log sweep, plus its
 static final state.
 
 <p align="center">
-<video src="animations/backend_comparison.mp4" controls width="640" muted loop></video>
+<img src="animations/backend_comparison.gif" width="640" alt="the cross-backend sweep film">
 </p>
-<p align="center"><sub>animated staging, then the full final state</sub></p>
+<p align="center"><sub>animated staging, then the full final state · <a href="animations/backend_comparison.mp4">full-res mp4</a></sub></p>
 
 ![Matmul backends — log-log sweep and shaped networks](animations/backend_comparison.png)
 
