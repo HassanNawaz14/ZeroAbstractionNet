@@ -16,10 +16,9 @@ logs/*
 *.dylib
 *.lib
 
-
-# Benchmark output
-benchmark_results.csv
-benchmark_shaped.csv
+# Benchmark CSVs are committed repo data since the presentation phase
+# (present/animate_budget.py + present/recut_comparison.py consume them);
+# regenerate with benchmark_matmul.py --sweep + compare_backends.py.
 
 # Profile output
 *.txt
