@@ -17,16 +17,22 @@ def _generate_matrix(n: int, rng: random.Random) -> list[list[float]]:
     return [[rng.uniform(-1.0, 1.0) for _ in range(n)] for _ in range(n)]
 
 
-def timed_best_of(backend, A: list[list[float]], B: list[list[float]], repeats: int = 3) -> float:
+def timed_best_of(backend, A: list[list[float]], B: list[list[float]],
+                  repeats: int = 3, variant: str | None = None) -> float:
     """Best-of-N wall-clock timing of backend.matmul(A, B), in seconds.
 
     Shared by the CLI sweep below and by analyze_run.py, which benchmarks the
-    actual matmul shapes the training network uses.
+    actual matmul shapes the training network uses. `variant` threads the
+    implementation variant (e.g. asm 'scalar'/'vectorized'/'blocked', c
+    'naive'/'blocked'); None means "use the backend's default variant".
     """
     best = float("inf")
     for _ in range(repeats):
         t0 = time.perf_counter()
-        _ = backend.matmul(A, B)
+        if variant is None:
+            _ = backend.matmul(A, B)
+        else:
+            _ = backend.matmul(A, B, variant=variant)
         t1 = time.perf_counter()
         elapsed = t1 - t0
         if elapsed < best:
@@ -76,7 +82,10 @@ def main():
 
         A, B = _generate_matrix(n, rng), _generate_matrix(n, rng)
 
-        best = timed_best_of(backend, A, B, args.repeats)
+        # The pure-Python backend has no `variant` parameter; thread it for
+        # the native backends (which do).
+        variant_kw = args.variant if args.backend != "python" else None
+        best = timed_best_of(backend, A, B, args.repeats, variant=variant_kw)
 
         if calib_time is None:
             calib_time = best
