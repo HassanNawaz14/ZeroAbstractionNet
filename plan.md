@@ -104,7 +104,7 @@ the worst possible README embed.
       films, stills, 3 showcase mp4s, backend_comparison mp4+png, 3 GIFs,
       dataset, two-tier strategy, full sweep/shaped/showcase tables,
       measurement card, usage + layout + testing sections, doc links.)
-      (redesigned 2026-08-04 per review, commit 8f2a3ea: ASCII figlet
+      (redesigned 2026-08-04 per review, commit 7e2fd1b: ASCII figlet
       header replaces the PNG banner; every film gets its own section with
       top-level `<video>` embeds (HTML-table video embeds were not
       rendering); data shown via varied media — tables, `<details>`,
