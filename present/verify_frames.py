@@ -53,7 +53,8 @@ def probe_streams(mp4_path):
         info[key] = value
     fps_num, _, fps_den = info["r_frame_rate"].partition("/")
     fps = float(fps_num) / (float(fps_den) if float(fps_den) else 1.0)
-    duration = float(info["duration"])
+    dur = info.get("duration", "N/A")
+    duration = float(dur) if dur not in ("N/A", "") else 1.0
     return int(info["width"]), int(info["height"]), duration, fps
 
 
@@ -210,7 +211,28 @@ def _check_stack(mp4_path):
           f"asm={count_in_region(asm[2], w, h, *CODE_PANEL, LEVEL_COLORS['asm'])}")
 
 
-SPECS = {"budget": _check_budget, "stack": _check_stack}
+def _check_banner(png_path):
+    w, h, duration, fps = probe_streams(png_path)
+    _check_canvas(w, h, (1920, 640))
+    data = decode_frame(png_path, 0)[2]
+
+    bg = count_in_region(data, w, h, 0, 0, 1920, 640, PALETTE["BG"])
+    assert bg >= 1920 * 640 * 0.5, f"background too sparse ({bg} px)"
+
+    for name, colour in (("python", PALETTE["LANE_PY"]),
+                         ("c", PALETTE["LANE_C"]),
+                         ("asm", PALETTE["LANE_ASM"])):
+        n = count_in_region(data, w, h, 1100, 180, 1830, 560, colour)
+        assert n >= 200, f"banner lane {name} missing in right motif ({n} px)"
+
+    accent = count_in_region(data, w, h, 0, 0, 1920, 640, PALETTE["ACCENT"])
+    assert accent >= 500, f"banner accent missing ({accent} px)"
+    text = count_in_region(data, w, h, 0, 0, 1920, 640, PALETTE["TEXT"])
+    assert text >= 2000, f"banner title text missing ({text} px)"
+    print("banner spec OK: 1920x640, background, 3 lane colours, accent, title text")
+
+
+SPECS = {"budget": _check_budget, "stack": _check_stack, "banner": _check_banner}
 
 
 def main():
