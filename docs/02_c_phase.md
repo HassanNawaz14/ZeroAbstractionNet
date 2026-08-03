@@ -250,24 +250,25 @@ speedup (python/c-blocked)`. This is the deliverable that shows the story
 so far — save it, phase 3 appends to it rather than replacing it.
 
 ## Definition of done for phase 2
-- [ ] `native/c/libmatmul.so` builds cleanly via `make -C native/c` with no
+- [x] `native/c/libmatmul.so` builds cleanly via `make -C native/c` with no
       warnings under `-Wall -Wextra`.
-- [ ] `train.py --backend c` produces the same converged loss (within
+- [x] `train.py --backend c` produces the same converged loss (within
       `1e-6`) as `train.py --backend python` on the same seed, and the
       same 4 golden points still classify correctly.
-- [ ] `tests/test_ops_c.py` passes, including the boundary-size blocking
+- [x] `tests/test_ops_c.py` passes, including the boundary-size blocking
       cases.
-- [ ] `benchmark_results.csv` / `benchmark_report.md` show naive-C beating
+- [x] `benchmark_results.csv` / `benchmark_report.md` show naive-C beating
       naive-Python by roughly 1-2 orders of magnitude, and blocked-C
       beating naive-C further at larger sizes (the gap should widen, not
-      stay constant, as size grows past cache size — if it doesn't widen,
-      the blocking implementation likely has a bug or `BLOCK_SIZE` is
-      poorly tuned for this machine's cache).
-- [ ] `animate.py --log-dir logs/<c-run>` works unchanged, no edits needed.
-- [ ] Showcase-tier comparison: `compare_backends.py` shows c beating python
-      per epoch at `[2,32,32,1]`/n=200 (measured ~4-4.5× steady-state on this
-      machine: python ~78 ms vs c ~17 ms median), bounded by the frozen-python
-      ops and per-call list-of-lists marshalling — see the matmul-level vs
-      epoch-level note above), with c-vs-python **matmul** speedups of
-      ~15-30× at the same shapes in `benchmark_shaped.csv`. Demo-tier loss
-      parity (1e-6) and golden points still hold (verified bit-identical).
+      stay constant, as size grows past cache size).
+- [x] `animate.py --log-dir logs/<c-run>` works unchanged, no edits needed.
+- [x] Showcase-tier comparison: `compare_backends.py` shows c beating python
+      per epoch at `[2,32,32,1]`/n=200 (measured ~4× steady-state on this
+      machine, bounded by the frozen-python ops and per-call list-of-lists
+      marshalling — see the matmul-level vs epoch-level note above), with
+      c-vs-python **matmul** speedups of ~15-30× at the same shapes in
+      `benchmark_shaped.csv`. Demo-tier loss parity (1e-6) and golden
+      points still hold (verified bit-identical).
+
+> Closed as accepted when phase 3 ended; the frozen-interface bound and
+> the matmul-level-vs-epoch-level framing are re-stated in `RESULTS.md`.

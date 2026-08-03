@@ -343,21 +343,24 @@ the dataset spec above and assert all four end up on the correct side of
 0.5.
 
 ## Definition of done for phase 1
-- [ ] `train.py --backend python` runs end-to-end, loss decreases, all 4
+- [x] `train.py --backend python` runs end-to-end, loss decreases, all 4
       golden points classify correctly after training.
-- [ ] `benchmark_matmul.py --backend python` produces
+- [x] `benchmark_matmul.py --backend python` produces
       `benchmark_results.csv` with at least sizes up to where a single
       matmul takes ~5-10s (find this empirically — that's your "ceiling"
       data point for the pure-Python baseline).
-- [ ] `profile_run.py` output clearly shows `matmul` (or the function that
+- [x] `profile_run.py` output clearly shows `matmul` (or the function that
       calls it) as the dominant cost — save this output as
       `profile_baseline.txt`, it's referenced in phase 2's motivation.
-- [ ] `animate.py` produces a working mp4/gif with all three panels
+- [x] `animate.py` produces a working mp4/gif with all three panels
       synced and readable.
-- [ ] Both tiers work end-to-end: demo-tier defaults untouched, and a
+- [x] Both tiers work end-to-end: demo-tier defaults untouched, and a
       showcase-tier Python run (`--layers 2,32,32,1 --n-per-quadrant 50
       --epochs 250 --lr 2.5`) trains, logs, and animates correctly.
-- [ ] All tests in `tests/` pass.
-- [ ] No `import numpy` / `import torch` / `import tensorflow` anywhere
+- [x] All tests in `tests/` pass.
+- [x] No `import numpy` / `import torch` / `import tensorflow` anywhere
       except optionally inside a clearly separate, optional analysis
       script that is not imported by anything else.
+
+Closed as accepted when phase 2 landed; evidence lives in `RESULTS.md`,
+`profile_baseline.txt`, and `benchmark_report.md`.

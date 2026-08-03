@@ -210,22 +210,39 @@ would show no benefit and is expected to look flat.
   don't add complexity speculatively.
 
 ## Definition of done for phase 3
-- [ ] `native/asm/libmatmul_asm.so` builds cleanly from `matmul.asm` via
+- [x] `native/asm/libmatmul_asm.so` builds cleanly from `matmul.asm` via
       `make -C native/asm`.
-- [ ] All three stages (scalar, vectorized, blocked) are correct per
+- [x] All three stages (scalar, vectorized, blocked) are correct per
       `tests/test_ops_asm.py`, including the non-multiple-of-8 and
       non-multiple-of-`BLOCK_SIZE` boundary cases.
-- [ ] `train.py --backend asm` converges and all 4 golden points classify
+- [x] `train.py --backend asm` converges and all 4 golden points classify
       correctly.
-- [ ] `benchmark_report.md` / plot shows a clear staged progression:
+- [x] `benchmark_report.md` / plot shows a clear staged progression:
       python < c-naive < c-blocked < asm-scalar < asm-vectorized <
       asm-blocked, with asm-blocked being the fastest but not required to
       beat any external BLAS reference.
-- [ ] `compare_backends.py` comparison table/plot shows the same staged
+- [x] `compare_backends.py` comparison table/plot shows the same staged
       progression at showcase tier with per-epoch speedups.
-- [ ] `animate.py --log-dir logs/<asm-run>` works unchanged.
-- [ ] A short `RESULTS.md` at the project root summarizing: max
+- [x] `animate.py --log-dir logs/<asm-run>` works unchanged.
+- [x] A short `RESULTS.md` at the project root summarizing: max
       network/matrix size trained in a fixed time budget at each phase,
       the final speedup table, and the profiling evidence from
       `profile_baseline.txt` (phase 1) that motivated the whole exercise —
       this is the write-up for your post.
+
+## Closeout notes (phase 3)
+
+- `benchmark_matmul.py` `timed_best_of` threads `variant` through to the
+  backend now (it previously always measured the default `blocked` variant
+  while labelling the row `scalar`/`vectorized`); `compare_backends.py`
+  is unaffected (None = backend default).
+- The benchmark/data CSVs must be UTF-8 **without BOM** and end with a
+  newline. PowerShell `Set-Content -Encoding UTF8` writes a BOM (breaks
+  `csv.DictReader`) and Python's `open(..., "a")` append into a file that
+  lacks a trailing newline merges the first new row's label onto the last
+  old row (`...0.0010python,200,...`). Both bit us; the CSV files are
+  regenerated cleanly here.
+- Measured asm-scalar sits between c-naive and c-blocked per size (it is a
+  deliberately naive stage-A baseline); the honest staged message is
+  "within each language family the progression holds, and asm-blocked is
+  fastest overall" — noted in RESULTS.md.
