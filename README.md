@@ -1,12 +1,22 @@
-<p align="center">
+<div align="center">
 <pre>
- _____   __________  ____  ___    ____ _______________  ___   ________________
-/__  /  / ____/ __ \/ __ \/   |  / __ ) ___/_  __/ __ \/   | / ____/_  __/  _/
-  / /  / __/ / /_/ / / / / /| | / __  \__ \ / / / /_/ / /| |/ /     / /  / /
- / /__/ /___/ _, _/ /_/ / ___ |/ /_/ /__/ // / / _, _/ ___ / /___  / / _/ /
-/____/_____/_/ |_|\____/_/  |_/_____/____//_/ /_/ |_/_/  |_\____/ /_/ /___/
+                  _____   __________  ____ 
+                 /__  /  / ____/ __ \/ __ \
+                   / /  / __/ / /_/ / / / /
+                  / /__/ /___/ _, _/ /_/ / 
+                 /____/_____/_/ |_|\____/  
+      ___    ____ _______________  ___   ________________
+     /   |  / __ ) ___/_  __/ __ \/   | / ____/_  __/  _/
+    / /| | / __  \__ \ / / / /_/ / /| |/ /     / /  / /  
+   / ___ |/ /_/ /__/ // / / _, _/ ___ / /___  / / _/ /   
+  /_/  |_/_____/____//_/ /_/ |_/_/  |_\____/ /_/ /___/   
+               ____  _   __   _   ______________
+              / __ \/ | / /  / | / / ____/_  __/
+             / / / /  |/ /  /  |/ / __/   / /   
+            / /_/ / /|  /  / /|  / /___  / /    
+            \____/_/ |_/  /_/ |_/_____/ /_/     
 </pre>
-</p>
+</div>
 
 <p align="center">
 <em>a from-scratch neural network — pure Python → C → hand-written x86-64 AVX2/FMA assembly<br>measured, not claimed · zero third-party compute libraries</em>
@@ -155,15 +165,33 @@ static final state.
 
 ![Matmul backends — log-log sweep and shaped networks](animations/backend_comparison.png)
 
-### 5 · The GIF gallery
+### 5 · The classic demo runs
 
-The classic loops, straight from phase 1-2:
+Before the showcase existed, there were these — the tiny demo net
+`[2,4,4,1]`, 250 epochs, lr 2.5, one loop per backend. Same seed, same
+loss curve, three different engines underneath:
 
-| | |
-|---|---|
-| <img src="animations/training.gif" width="430"> | the demo-tier training loop — diagram, boundary, loss, phase times (`animate.py`) |
-| <img src="animations/demo_run_1_layer.gif" width="430"> | a 1-hidden-layer demo run — the simplest thing that learns XOR |
-| <img src="animations/dataset_generation.gif" width="430"> | the generator placing 25 jittered points per quadrant (`data/animate_data_generation.py`) |
+<p align="center">
+<img src="animations/py_run_250_lr25.gif" width="640">
+</p>
+<p align="center"><sub>pure Python — the demo net at work: diagram, decision boundary, loss curve, per-epoch phase times</sub></p>
+
+<p align="center">
+<img src="animations/c_run_250_lr25.gif" width="640">
+</p>
+<p align="center"><sub>C backend — the same run, the same seed, a faster matmul under the hood</sub></p>
+
+<p align="center">
+<img src="animations/asm_run_250_lr25.gif" width="640">
+</p>
+<p align="center"><sub>x86-64 assembly — the same run again, the fastest matmul of the three</sub></p>
+
+And the one that started it all:
+
+<p align="center">
+<img src="animations/training.gif" width="640">
+</p>
+<p align="center"><sub>the original phase-1 loop — the GIF that grew this whole repo</sub></p>
 
 ---
 
@@ -303,7 +331,13 @@ Points on the axes (`x == 0` or `y == 0`) are never generated.
 - **Probe grid** — a separate uniform `resolution × resolution` grid over [-1, 1]² (default 40 → 1600 points) for the decision-boundary heatmap only — never trained on.
 
 `data/generate_data.py` is the single source of all dataset loading for
-every phase.
+every phase. Watch it build the 100-point dataset, 25 seeded, jittered
+points per quadrant:
+
+<p align="center">
+<img src="animations/dataset_generation.gif" width="560">
+</p>
+<p align="center"><sub>the generator at work — a uniform grid, a whisper of jitter, a deterministic seed</sub></p>
 
 ## Two tiers — demo vs showcase
 
